@@ -18,7 +18,10 @@ class Link(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    # No DB-level UNIQUE on slug — uniqueness among *active* links is enforced
+    # in the application layer (filtered on deleted_at IS NULL).  A DB-level
+    # unique constraint would prevent slug reuse after a soft-delete.
+    slug: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     destination_url: Mapped[str] = mapped_column(Text, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     max_clicks: Mapped[int | None] = mapped_column(Integer, nullable=True)
