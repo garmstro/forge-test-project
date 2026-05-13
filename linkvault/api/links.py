@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -25,9 +25,13 @@ from linkvault.services.shortener import (
 
 router = APIRouter(prefix="/links", tags=["links"])
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+
+def _utc_now() -> datetime:
+    """Return the current UTC time as a naive datetime (for DB storage).
+
+    SEC-14: replaces the deprecated datetime.utcnow() call.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 async def _resolve_active_link(slug: str, user: User, db: AsyncSession) -> Link:
@@ -49,11 +53,6 @@ async def _resolve_active_link(slug: str, user: User, db: AsyncSession) -> Link:
     return link
 
 
-# ---------------------------------------------------------------------------
-# POST /links — create a new short link
-# ---------------------------------------------------------------------------
-
-
 @router.post("", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
 async def create_link(
     payload: LinkCreate,
@@ -62,20 +61,17 @@ async def create_link(
 ) -> LinkResponse:
     """Create a new short link for the authenticated user."""
 
-    # ---- Determine slug -----------------------------------------------
     if payload.slug is not None:
-        # Custom slug validation
         if not is_valid_custom_slug(payload.slug):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Slug must be 3–64 characters: alphanumeric and hyphens only.",
+                detail="Slug must be 3-64 characters: alphanumeric and hyphens only.",
             )
         if is_reserved_slug(payload.slug):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"'{payload.slug}' is a reserved word and cannot be used as a slug.",
             )
-        # Check uniqueness (case-insensitive via lower-case storage)
         slug = payload.slug.lower()
         existing = await db.execute(
             select(Link).where(Link.slug == slug, Link.deleted_at.is_(None))
@@ -86,7 +82,6 @@ async def create_link(
                 detail=f"Slug '{slug}' is already in use.",
             )
     else:
-        # Auto-generate slug with up to MAX_RETRIES collision retries
         slug: str | None = None  # type: ignore[no-redef]
         for _ in range(MAX_RETRIES):
             candidate = generate_slug()
@@ -102,7 +97,6 @@ async def create_link(
                 detail="Could not generate a unique slug after several retries. Please try again.",
             )
 
-    # ---- Persist ----------------------------------------------------------
     link = Link(
         user_id=current_user.id,
         slug=slug,
@@ -111,14 +105,9 @@ async def create_link(
         max_clicks=payload.max_clicks,
     )
     db.add(link)
-    await db.flush()  # populate defaults (id, created_at) before reading
+    await db.flush()
 
     return LinkResponse.model_validate(link)
-
-
-# ---------------------------------------------------------------------------
-# GET /links — paginated list of the authenticated user's links
-# ---------------------------------------------------------------------------
 
 
 @router.get("", response_model=PaginatedLinksResponse)
@@ -138,13 +127,11 @@ async def list_links(
         Link.deleted_at.is_(None),
     )
 
-    # Total count
     count_result = await db.execute(
         select(func.count()).select_from(base_query.subquery())
     )
     total: int = count_result.scalar_one()
 
-    # Paginated rows
     rows_result = await db.execute(
         base_query.order_by(Link.created_at.desc())
         .offset((page - 1) * page_size)
@@ -160,11 +147,6 @@ async def list_links(
     )
 
 
-# ---------------------------------------------------------------------------
-# GET /links/{slug} — full metadata for a single link
-# ---------------------------------------------------------------------------
-
-
 @router.get("/{slug}", response_model=LinkResponse)
 async def get_link(
     slug: str,
@@ -174,11 +156,6 @@ async def get_link(
     """Return full metadata for a single link owned by the authenticated user."""
     link = await _resolve_active_link(slug, current_user, db)
     return LinkResponse.model_validate(link)
-
-
-# ---------------------------------------------------------------------------
-# PATCH /links/{slug} — update mutable fields
-# ---------------------------------------------------------------------------
 
 
 @router.patch("/{slug}", response_model=LinkResponse)
@@ -207,11 +184,6 @@ async def update_link(
     return LinkResponse.model_validate(link)
 
 
-# ---------------------------------------------------------------------------
-# DELETE /links/{slug} — soft-delete
-# ---------------------------------------------------------------------------
-
-
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_link(
     slug: str,
@@ -220,7 +192,7 @@ async def delete_link(
 ) -> None:
     """Soft-delete a link (sets deleted_at). The slug becomes immediately reusable."""
     link = await _resolve_active_link(slug, current_user, db)
-    link.deleted_at = datetime.utcnow()
+    # SEC-14: use timezone-aware helper instead of datetime.utcnow()
+    link.deleted_at = _utc_now()
     db.add(link)
     await db.flush()
-

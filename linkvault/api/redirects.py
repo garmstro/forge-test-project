@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -9,25 +10,54 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.database import get_db
-from linkvault.models.click import Click
+from linkvault.models.click import Click, _REFERER_MAX, _USER_AGENT_MAX
 from linkvault.models.link import Link
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["redirects"])
 
 
 def _anonymize_ip(ip: str | None) -> str | None:
-    """Zero the last octet of an IPv4 address for privacy.
+    """Anonymize an IP address for privacy before storing it.
 
-    IPv6 addresses are returned unchanged (full anonymisation is out of scope
-    for this phase — see DECISIONS.md §5).
+    - **IPv4**: zeroes the last octet  (e.g. ``1.2.3.4`` → ``1.2.3.0``).
+    - **IPv6**: zeroes the last 80 bits (last 5 groups) so that the /48
+      network prefix is retained but the individual host is not identifiable.
+      SEC-13: previously IPv6 addresses were stored verbatim, which could
+      uniquely identify a user.
+
+    Returns ``None`` if *ip* is ``None`` or cannot be parsed.
     """
     if ip is None:
         return None
+
+    # IPv4: zero the last octet
     parts = ip.split(".")
     if len(parts) == 4:
         parts[-1] = "0"
         return ".".join(parts)
-    return ip
+
+    # IPv6: attempt to parse and zero the last 80 bits
+    try:
+        import ipaddress
+        addr = ipaddress.IPv6Address(ip)
+        # Keep the top 48 bits (first 3 groups), zero the rest
+        packed = addr.packed  # 16 bytes
+        anonymized = packed[:6] + b"\x00" * 10
+        return str(ipaddress.IPv6Address(anonymized))
+    except ValueError:
+        pass
+
+    # Unrecognised format — do not store
+    return None
+
+
+def _utc_now() -> datetime:
+    """Return the current UTC time as a naive datetime (for DB storage).
+
+    SEC-14: replaces the deprecated ``datetime.utcnow()`` call.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @router.get("/{slug}", response_model=None)
@@ -56,8 +86,7 @@ async def redirect(
 
     elapsed_ms = (time.monotonic() - t0) * 1_000
     if elapsed_ms > 10:
-        import logging
-        logging.getLogger(__name__).warning(
+        logger.warning(
             "Redirect DB lookup took %.2f ms (> 10 ms threshold) for slug=%s",
             elapsed_ms,
             slug,
@@ -71,8 +100,9 @@ async def redirect(
 
     # ------------------------------------------------------------------
     # Expiry / click-cap check
+    # SEC-14: use timezone-aware helper instead of datetime.utcnow()
     # ------------------------------------------------------------------
-    now = datetime.utcnow()
+    now = _utc_now()
 
     if link.expires_at is not None and link.expires_at < now:
         return JSONResponse(
@@ -97,13 +127,20 @@ async def redirect(
 
     # ------------------------------------------------------------------
     # Record click event in the same transaction.
+    # SEC-07: truncate user_agent and referer to their column limits so that
+    #         oversized headers cannot cause storage-exhaustion or DB errors.
+    # SEC-13: anonymize IPv6 addresses (previously stored verbatim).
     # ------------------------------------------------------------------
     raw_ip = request.client.host if request.client else None
+    raw_ua = request.headers.get("user-agent")
+    raw_ref = request.headers.get("referer")
+
     click = Click(
         link_id=link.id,
         ip_address=_anonymize_ip(raw_ip),
-        user_agent=request.headers.get("user-agent"),
-        referer=request.headers.get("referer"),
+        # SEC-07: truncate to column limits
+        user_agent=raw_ua[:_USER_AGENT_MAX] if raw_ua else None,
+        referer=raw_ref[:_REFERER_MAX] if raw_ref else None,
     )
     db.add(click)
 

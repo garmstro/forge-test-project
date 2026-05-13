@@ -133,11 +133,27 @@ async def test_redirect_deleted_slug_returns_404(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_redirect_expired_link_returns_410(client: AsyncClient) -> None:
+async def test_redirect_expired_link_returns_410(client: AsyncClient, db_session) -> None:
     """A link whose expires_at is in the past should return 410."""
+    import uuid
+    from sqlalchemy import select
+    from linkvault.models.link import Link
+    from linkvault.models.user import User
+
     key = await register_and_get_key(client, "exp1@example.com")
-    past = (datetime.now(timezone.utc) - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    await create_link(client, key, url="https://expired.example.com/", slug="exp1", expires_at=past)
+    result = await db_session.execute(select(User).where(User.email == "exp1@example.com"))
+    user = result.scalar_one()
+
+    past = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=1)
+    link = Link(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        slug="exp1",
+        destination_url="https://expired.example.com/",
+        expires_at=past,
+    )
+    db_session.add(link)
+    await db_session.commit()
 
     resp = await client.get("/exp1", follow_redirects=False)
     assert resp.status_code == 410
@@ -199,11 +215,27 @@ async def test_click_count_increments_atomically(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_no_click_recorded_for_expired_link(client: AsyncClient) -> None:
+async def test_no_click_recorded_for_expired_link(client: AsyncClient, db_session) -> None:
     """An expired link should not have its click_count incremented."""
+    import uuid
+    from sqlalchemy import select
+    from linkvault.models.link import Link
+    from linkvault.models.user import User
+
     key = await register_and_get_key(client, "noclick1@example.com")
-    past = (datetime.now(timezone.utc) - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    await create_link(client, key, url="https://example.com/", slug="noclick1", expires_at=past)
+    result = await db_session.execute(select(User).where(User.email == "noclick1@example.com"))
+    user = result.scalar_one()
+
+    past = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=1)
+    link = Link(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        slug="noclick1",
+        destination_url="https://example.com/",
+        expires_at=past,
+    )
+    db_session.add(link)
+    await db_session.commit()
 
     await client.get("/noclick1", follow_redirects=False)
 

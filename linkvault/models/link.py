@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -26,8 +26,13 @@ class Link(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     max_clicks: Mapped[int | None] = mapped_column(Integer, nullable=True)
     click_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # SEC-14: use timezone-aware datetime.now(timezone.utc) instead of the
+    # deprecated datetime.utcnow() which returns a naive datetime.
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow
+        DateTime,
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

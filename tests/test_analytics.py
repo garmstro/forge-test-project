@@ -545,18 +545,31 @@ async def test_summary_top_link(
 @pytest.mark.asyncio
 async def test_summary_active_vs_expired_links(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     """active_links must exclude expired or capped links."""
+    import uuid
+    from sqlalchemy import select
+
     key = await register_and_get_key(client, "sum_active@example.com")
+    from linkvault.models.user import User
+    result = await db_session.execute(select(User).where(User.email == "sum_active@example.com"))
+    user = result.scalar_one()
 
     # 1 active link (no expiry, no cap)
     await create_link(client, key, slug="active-link")
 
-    # 1 expired link
-    past = (datetime.now(timezone.utc) - timedelta(seconds=1)).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
+    # 1 expired link — inserted directly to bypass API future-date validation
+    past = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=1)
+    expired_link = Link(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        slug="expired-link",
+        destination_url="https://example.com/",
+        expires_at=past,
     )
-    await create_link(client, key, slug="expired-link", expires_at=past)
+    db_session.add(expired_link)
+    await db_session.commit()
 
     resp = await client.get(f"{ANALYTICS_URL}/summary", headers=auth(key))
     assert resp.status_code == 200

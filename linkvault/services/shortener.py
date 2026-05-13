@@ -1,8 +1,8 @@
 """Slug generation service — Base58 alphabet, collision-safe."""
 from __future__ import annotations
 
-import random
 import re
+import secrets  # SEC-01: use CSPRNG instead of random.choices (Mersenne Twister)
 
 # Base58 alphabet: standard Base58 minus 0, O, I, l
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -15,8 +15,13 @@ CUSTOM_SLUG_RE = re.compile(r"^[a-zA-Z0-9-]{3,64}$")
 
 
 def generate_slug(length: int = SLUG_LENGTH) -> str:
-    """Return a random Base58 slug of *length* characters."""
-    return "".join(random.choices(BASE58_ALPHABET, k=length))
+    """Return a cryptographically random Base58 slug of *length* characters.
+
+    Uses :mod:`secrets` (backed by the OS CSPRNG) instead of the
+    non-cryptographic :mod:`random` module so that generated slugs cannot be
+    predicted by an attacker who observes a sequence of outputs.
+    """
+    return "".join(secrets.choice(BASE58_ALPHABET) for _ in range(length))
 
 
 def is_valid_custom_slug(slug: str) -> bool:
