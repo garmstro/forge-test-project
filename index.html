@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkVault 🔗</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d1117;
+      --surface:     #161b22;
+      --surface-2:   #21262d;
+      --border:      #30363d;
+      --accent:      #58a6ff;
+      --accent-dim:  #1f6feb;
+      --green:       #3fb950;
+      --purple:      #bc8cff;
+      --orange:      #d29922;
+      --red:         #f85149;
+      --text:        #e6edf3;
+      --text-muted:  #8b949e;
+      --code-bg:     #161b22;
+      --radius:      8px;
+      --font-mono:   "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2.5rem 0;
+    }
+
+    /* ── Layout ── */
+    .page-wrapper {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 2rem 1.25rem;
+    }
+
+    .sidebar-logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .sidebar-logo span.emoji { font-size: 1.4rem; }
+
+    .sidebar nav ul {
+      list-style: none;
+    }
+
+    .sidebar nav ul li {
+      margin: 0.2rem 0;
+    }
+
+    .sidebar nav ul li a {
+      display: block;
+      padding: 0.3rem 0.6rem;
+      border-radius: 5px;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .sidebar nav ul li a:hover {
+      background: var(--surface-2);
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .sidebar-section-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin: 1.2rem 0 0.4rem 0.6rem;
+    }
+
+    /* ── Main Content ── */
+    main {
+      flex: 1;
+      min-width: 0;
+      padding: 3rem 4rem;
+      max-width: 900px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      margin-bottom: 2.5rem;
+    }
+
+    .hero h1 {
+      font-size: 2.4rem;
+      font-weight: 800;
+      line-height: 1.2;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.75rem;
+    }
+
+    .hero .tagline {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      border-left: 3px solid var(--accent-dim);
+      padding-left: 1rem;
+      margin-top: 0.5rem;
+    }
+
+    /* ── Badges ── */
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1.25rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+    }
+
+    .badge-blue   { background: #0d2a4a; color: var(--accent);  border-color: var(--accent-dim); }
+    .badge-green  { background: #0d2a1a; color: var(--green);   border-color: #2ea043; }
+    .badge-purple { background: #1e1040; color: var(--purple);  border-color: #8957e5; }
+    .badge-orange { background: #2d1f00; color: var(--orange);  border-color: #9e6a03; }
+
+    /* ── Section headings ── */
+    section { margin-bottom: 3rem; }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 1rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    h2 .section-icon { font-size: 1.1rem; }
+
+    h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    p { margin-bottom: 0.75rem; color: var(--text); }
+
+    /* ── Feature cards ── */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+
+    .feature-card:hover {
+      border-color: var(--accent-dim);
+      transform: translateY(-2px);
+    }
+
+    .feature-card .card-icon { font-size: 1.4rem; margin-bottom: 0.5rem; }
+
+    .feature-card h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin: 0 0 0.35rem;
+      color: var(--text);
+    }
+
+    .feature-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    /* ── Tech stack table ── */
+    .tech-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .tech-table th,
+    .tech-table td {
+      padding: 0.65rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tech-table th {
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .tech-table tr:last-child td { border-bottom: none; }
+
+    .tech-table td:first-child { color: var(--text-muted); }
+    .tech-table td:last-child  { color: var(--text); font-weight: 500; }
+
+    .tech-table tbody tr:hover td { background: var(--surface); }
+
+    /* ── Steps ── */
+    .steps { counter-reset: step; }
+
+    .step {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+      align-items: flex-start;
+    }
+
+    .step-num {
+      counter-increment: step;
+      flex-shrink: 0;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.15rem;
+    }
+
+    .step-body { flex: 1; }
+    .step-body p { margin: 0 0 0.4rem; font-size: 0.95rem; }
+
+    /* ── Code blocks ── */
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.6;
+      margin: 0.75rem 0;
+      position: relative;
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      background: var(--surface-2);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: var(--purple);
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: inherit;
+      color: var(--text);
+      border-radius: 0;
+    }
+
+    /* Syntax-like colouring for shell blocks */
+    .sh-comment { color: var(--text-muted); }
+    .sh-cmd     { color: var(--green); }
+    .sh-flag    { color: var(--orange); }
+    .sh-string  { color: #a5d6ff; }
+    .sh-var     { color: var(--purple); }
+
+    /* ── CLI commands ── */
+    .cli-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .cli-list li {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.55rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.83rem;
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+    }
+
+    .cli-list li .cmd  { color: var(--green); white-space: nowrap; }
+    .cli-list li .desc { color: var(--text-muted); font-family: inherit; font-size: 0.82rem; }
+
+    /* ── API reference table ── */
+    .api-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .api-table th,
+    .api-table td {
+      padding: 0.6rem 0.9rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .api-table th {
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .api-table tr:last-child td { border-bottom: none; }
+    .api-table tbody tr:hover td { background: var(--surface); }
+
+    .method {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .method-get    { background: #0d3a1a; color: #3fb950; }
+    .method-post   { background: #0d2a4a; color: #58a6ff; }
+    .method-patch  { background: #2d1f00; color: #d29922; }
+    .method-delete { background: #3a0d0d; color: #f85149; }
+
+    .path-cell { font-family: var(--font-mono); font-size: 0.82rem; color: var(--purple); }
+
+    .auth-yes { color: var(--green);      font-size: 1rem; }
+    .auth-no  { color: var(--text-muted); font-size: 1rem; }
+
+    /* ── Config table ── */
+    .config-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .config-table th,
+    .config-table td {
+      padding: 0.6rem 0.9rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .config-table th {
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .config-table tr:last-child td { border-bottom: none; }
+    .config-table tbody tr:hover td { background: var(--surface); }
+    .config-table td:first-child { font-family: var(--font-mono); color: var(--orange); font-size: 0.82rem; }
+    .config-table td:nth-child(2) { font-family: var(--font-mono); color: #a5d6ff; font-size: 0.82rem; }
+
+    /* ── File tree ── */
+    .file-tree {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .tree-dir  { color: var(--accent); font-weight: 600; }
+    .tree-file { color: var(--text); }
+    .tree-comment { color: var(--text-muted); }
+
+    /* ── Design decisions ── */
+    .decision-list { list-style: none; display: flex; flex-direction: column; gap: 0.9rem; }
+
+    .decision-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent-dim);
+      border-radius: var(--radius);
+      padding: 0.9rem 1.1rem;
+    }
+
+    .decision-item strong { color: var(--accent); display: block; margin-bottom: 0.3rem; font-size: 0.95rem; }
+    .decision-item p { color: var(--text-muted); font-size: 0.875rem; margin: 0; line-height: 1.55; }
+
+    /* ── Error envelope ── */
+    .error-envelope {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--red);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 4rem;
+      padding: 2rem 0 1rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+    }
+
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--accent); }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      main { padding: 2rem 1.5rem; }
+    }
+
+    @media (max-width: 600px) {
+      main { padding: 1.5rem 1rem; }
+      .hero h1 { font-size: 1.8rem; }
+      .feature-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="page-wrapper">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="emoji">🔗</span> LinkVault
+    </div>
+    <nav>
+      <div class="sidebar-section-label">Getting Started</div>
+      <ul>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#tech-stack">Tech Stack</a></li>
+        <li><a href="#quick-start">Quick Start</a></li>
+      </ul>
+      <div class="sidebar-section-label">Usage</div>
+      <ul>
+        <li><a href="#running-the-server">Running the Server</a></li>
+        <li><a href="#running-the-cli">Running the CLI</a></li>
+        <li><a href="#running-the-tests">Running the Tests</a></li>
+        <li><a href="#lifecycle-example">Lifecycle Example</a></li>
+      </ul>
+      <div class="sidebar-section-label">Reference</div>
+      <ul>
+        <li><a href="#api-reference">API Reference</a></li>
+        <li><a href="#configuration">Configuration</a></li>
+        <li><a href="#project-structure">Project Structure</a></li>
+        <li><a href="#design-decisions">Design Decisions</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main>
+
+    <!-- Hero -->
+    <div class="hero">
+      <h1>LinkVault 🔗</h1>
+      <p class="tagline">A production-grade URL shortening and analytics platform — built with FastAPI, SQLAlchemy (async), APScheduler, and a full-featured terminal CLI.</p>
+      <div class="badges">
+        <span class="badge badge-blue">Python 3.11+</span>
+        <span class="badge badge-green">FastAPI</span>
+        <span class="badge badge-purple">SQLAlchemy 2.x</span>
+        <span class="badge badge-orange">APScheduler</span>
+        <span class="badge badge-blue">Typer + Rich</span>
+        <span class="badge badge-green">Zero paid dependencies</span>
+      </div>
+    </div>
+
+    <hr />
+
+    <!-- Overview -->
+    <section id="overview">
+      <h2><span class="section-icon">📖</span> Overview</h2>
+      <p>
+        LinkVault is a self-hosted URL shortener with first-class analytics. It exposes a REST API for managing short links, tracks every click with anonymised metadata, and surfaces aggregated statistics through both the API and a Rich-powered terminal dashboard.
+      </p>
+      <p>
+        A background scheduler automatically expires stale links every 15 minutes. Everything runs <strong>locally with zero paid dependencies</strong> — no external services, no cloud accounts required.
+      </p>
+    </section>
+
+    <hr />
+
+    <!-- Features -->
+    <section id="features">
+      <h2><span class="section-icon">✨</span> Features</h2>
+      <div class="feature-grid">
+
+        <div class="feature-card">
+          <div class="card-icon">🔗</div>
+          <h3>Short Link Management</h3>
+          <p>Create, update, soft-delete, and list links with optional custom slugs, expiry dates, and per-link click caps.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="card-icon">⚡</div>
+          <h3>Redirect Engine</h3>
+          <p>Single-query slug resolution with atomic click-count increments. <code>301</code> for permanent, <code>302</code> for capped/expiring, <code>410</code> when exhausted.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="card-icon">📊</div>
+          <h3>Click Analytics</h3>
+          <p>Per-link breakdown by day, unique IPs, top referers, and top user-agents; user-level summary across all links.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="card-icon">🔐</div>
+          <h3>Authentication</h3>
+          <p>Email + password registration; UUID4 API key issued on registration and exchangeable via <code>/users/token</code>.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="card-icon">🕐</div>
+          <h3>Background Cleanup</h3>
+          <p>APScheduler job (SQLite-backed, survives restarts) expires links every 15 minutes and emits structured JSON log lines.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="card-icon">💻</div>
+          <h3>Terminal CLI</h3>
+          <p><code>linkvault</code> command for every API operation, with Rich tables, bold-green short URLs, and a bar-chart view of daily click data.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="card-icon">❤️</div>
+          <h3>Health Endpoint</h3>
+          <p><code>/health</code> reports DB and scheduler status; returns <code>503</code> when the database is unreachable.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <hr />
+
+    <!-- Tech Stack -->
+    <section id="tech-stack">
+      <h2><span class="section-icon">🛠️</span> Tech Stack</h2>
+      <table class="tech-table">
+        <thead>
+          <tr><th>Layer</th><th>Technology</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Language</td><td>Python 3.11+</td></tr>
+          <tr><td>Web Framework</td><td>FastAPI</td></tr>
+          <tr><td>Database</td><td>SQLite via SQLAlchemy 2.x (async)</td></tr>
+          <tr><td>Migrations</td><td>Alembic</td></tr>
+          <tr><td>Background Jobs</td><td>APScheduler</td></tr>
+          <tr><td>CLI</td><td>Typer + Rich</td></tr>
+          <tr><td>Testing</td><td>pytest + pytest-asyncio + httpx</td></tr>
+          <tr><td>Config</td><td>Pydantic Settings (<code>.env</code>)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <hr />
+
+    <!-- Quick Start -->
+    <section id="quick-start">
+      <h2><span class="section-icon">🚀</span> Quick Start</h2>
+      <div class="steps">
+
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <p>Clone the repository</p>
+            <pre><code>git clone https://github.com/garmstro/forge-test-project.git
+cd forge-test-project</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <p>Copy the example environment file and edit as needed</p>
+            <pre><code>cp .env.example .env</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <p>Install the package and all dev dependencies, then run migrations</p>
+            <pre><code>pip install -e ".[dev]" &amp;&amp; alembic upgrade head</code></pre>
+            <p style="font-size:0.875rem;color:var(--text-muted);margin-top:0.4rem;">
+              This installs LinkVault in editable mode (so <code>linkvault</code> CLI is on your <code>PATH</code>) and creates all database tables.
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <hr />
+
+    <!-- Running the Server -->
+    <section id="running-the-server">
+      <h2><span class="section-icon">🖥️</span> Running the Server</h2>
+      <pre><code>uvicorn linkvault.main:app --reload</code></pre>
+      <p>The API is now available at <a href="http://localhost:8000" target="_blank">http://localhost:8000</a></p>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:0.4rem;margin-top:0.5rem;">
+        <li>📄 Interactive docs: <a href="http://localhost:8000/docs" target="_blank"><code>http://localhost:8000/docs</code></a></li>
+        <li>❤️ Health check: <a href="http://localhost:8000/health" target="_blank"><code>http://localhost:8000/health</code></a></li>
+      </ul>
+    </section>
+
+    <hr />
+
+    <!-- Running the CLI -->
+    <section id="running-the-cli">
+      <h2><span class="section-icon">💻</span> Running the CLI</h2>
+      <pre><code>linkvault --help</code></pre>
+      <p>Available commands:</p>
+      <ul class="cli-list">
+        <li><span class="cmd">linkvault login</span>                          <span class="desc">Prompt for email/password; store API key in ~/.linkvault/config.json</span></li>
+        <li><span class="cmd">linkvault logout</span>                         <span class="desc">Remove stored credentials</span></li>
+        <li><span class="cmd">linkvault shorten &lt;url&gt;</span>           <span class="desc">[--slug SLUG] [--expires YYYY-MM-DD] [--max-clicks N]</span></li>
+        <li><span class="cmd">linkvault list</span>                           <span class="desc">[--page N]</span></li>
+        <li><span class="cmd">linkvault info &lt;slug&gt;</span>             <span class="desc">Full metadata for a single link</span></li>
+        <li><span class="cmd">linkvault stats &lt;slug&gt;</span>            <span class="desc">[--days N] — daily click bar chart</span></li>
+        <li><span class="cmd">linkvault delete &lt;slug&gt;</span>           <span class="desc">Soft-delete a link</span></li>
+      </ul>
+      <p style="margin-top:1rem;font-size:0.875rem;color:var(--text-muted);">
+        The CLI reads <code>LINKVAULT_API_URL</code> from the environment (default: <code>http://localhost:8000</code>) or accepts <code>--api-url</code> on every command.
+      </p>
+    </section>
+
+    <hr />
+
+    <!-- Running the Tests -->
+    <section id="running-the-tests">
+      <h2><span class="section-icon">🧪</span> Running the Tests</h2>
+      <pre><code>pytest -v</code></pre>
+      <p>The test suite uses an in-memory SQLite database — no running server required. Each test gets a fresh database via a session-scoped fixture.</p>
+      <p>To also check types:</p>
+      <pre><code>mypy linkvault/</code></pre>
+    </section>
+
+    <hr />
+
+    <!-- Lifecycle Example -->
+    <section id="lifecycle-example">
+      <h2><span class="section-icon">🔄</span> Full Lifecycle Example (curl)</h2>
+      <p>The following sequence demonstrates every major feature against a running server.</p>
+      <pre><code>BASE="http://localhost:8000"
+
+# 1. Register a new user — receive an API key
+curl -s -X POST "$BASE/users/register" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "password": "s3cr3t!"}' | tee /tmp/register.json
+
+API_KEY=$(jq -r '.api_key' /tmp/register.json)
+
+# 2. (Alternative) Exchange credentials for the API key
+curl -s -X POST "$BASE/users/token" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "password": "s3cr3t!"}'
+
+# 3. Create a short link with a custom slug and a click cap
+curl -s -X POST "$BASE/links" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "url": "https://example.com/some/very/long/path?utm_source=demo",
+        "slug": "demo",
+        "expires_at": "2026-12-31T23:59:59Z",
+        "max_clicks": 1000
+      }'
+
+# 4. Follow the redirect (use -L to follow, or inspect the Location header)
+curl -v "$BASE/demo"
+
+# 5. List all your links (paginated)
+curl -s "$BASE/links?page=1&amp;page_size=10" \
+  -H "Authorization: Bearer $API_KEY"
+
+# 6. Fetch full metadata for a single link
+curl -s "$BASE/links/demo" \
+  -H "Authorization: Bearer $API_KEY"
+
+# 7. Update the expiry date
+curl -s -X PATCH "$BASE/links/demo" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"expires_at": "2027-06-30T00:00:00Z"}'
+
+# 8. Get per-link analytics (last 30 days, Chicago time)
+curl -s "$BASE/analytics/demo?days=30&amp;tz=America/Chicago" \
+  -H "Authorization: Bearer $API_KEY"
+
+# 9. Get a summary across all your links
+curl -s "$BASE/analytics/summary" \
+  -H "Authorization: Bearer $API_KEY"
+
+# 10. Soft-delete the link (slug becomes immediately reusable)
+curl -s -X DELETE "$BASE/links/demo" \
+  -H "Authorization: Bearer $API_KEY"
+
+# 11. Confirm the server and scheduler are healthy
+curl -s "$BASE/health"</code></pre>
+    </section>
+
+    <hr />
+
+    <!-- API Reference -->
+    <section id="api-reference">
+      <h2><span class="section-icon">📡</span> API Reference</h2>
+      <table class="api-table">
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Auth</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="method method-post">POST</span></td>
+            <td class="path-cell">/users/register</td>
+            <td><span class="auth-no" title="No auth required">✗</span></td>
+            <td>Register a new user; returns plaintext API key</td>
+          </tr>
+          <tr>
+            <td><span class="method method-post">POST</span></td>
+            <td class="path-cell">/users/token</td>
+            <td><span class="auth-no" title="No auth required">✗</span></td>
+            <td>Exchange email + password for the API key</td>
+          </tr>
+          <tr>
+            <td><span class="method method-get">GET</span></td>
+            <td class="path-cell">/health</td>
+            <td><span class="auth-no" title="No auth required">✗</span></td>
+            <td>Service health (DB + scheduler status)</td>
+          </tr>
+          <tr>
+            <td><span class="method method-get">GET</span></td>
+            <td class="path-cell">/{slug}</td>
+            <td><span class="auth-no" title="No auth required">✗</span></td>
+            <td>Redirect to destination URL; records click event</td>
+          </tr>
+          <tr>
+            <td><span class="method method-post">POST</span></td>
+            <td class="path-cell">/links</td>
+            <td><span class="auth-yes" title="Auth required">✓</span></td>
+            <td>Create a new short link</td>
+          </tr>
+          <tr>
+            <td><span class="method method-get">GET</span></td>
+            <td class="path-cell">/links</td>
+            <td><span class="auth-yes" title="Auth required">✓</span></td>
+            <td>Paginated list of the authenticated user's links</td>
+          </tr>
+          <tr>
+            <td><span class="method method-get">GET</span></td>
+            <td class="path-cell">/links/{slug}</td>
+            <td><span class="auth-yes" title="Auth required">✓</span></td>
+            <td>Full metadata + live click count for one link</td>
+          </tr>
+          <tr>
+            <td><span class="method method-patch">PATCH</span></td>
+            <td class="path-cell">/links/{slug}</td>
+            <td><span class="auth-yes" title="Auth required">✓</span></td>
+            <td>Update <code>url</code>, <code>expires_at</code>, or <code>max_clicks</code></td>
+          </tr>
+          <tr>
+            <td><span class="method method-delete">DELETE</span></td>
+            <td class="path-cell">/links/{slug}</td>
+            <td><span class="auth-yes" title="Auth required">✓</span></td>
+            <td>Soft-delete a link (slug immediately reusable)</td>
+          </tr>
+          <tr>
+            <td><span class="method method-get">GET</span></td>
+            <td class="path-cell">/analytics/{slug}</td>
+            <td><span class="auth-yes" title="Auth required">✓</span></td>
+            <td>Per-link analytics (clicks by day, IPs, referers)</td>
+          </tr>
+          <tr>
+            <td><span class="method method-get">GET</span></td>
+            <td class="path-cell">/analytics/summary</td>
+            <td><span class="auth-yes" title="Auth required">✓</span></td>
+            <td>Aggregate stats across all of the user's links</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Error Response Envelope</h3>
+      <p>All error responses follow a consistent structure:</p>
+      <div class="error-envelope">
+        <span style="color:var(--text-muted)">{</span><br/>
+        &nbsp;&nbsp;<span style="color:var(--orange)">"error"</span><span style="color:var(--text-muted)">:</span> <span style="color:#a5d6ff">"machine_readable_code"</span><span style="color:var(--text-muted)">,</span><br/>
+        &nbsp;&nbsp;<span style="color:var(--orange)">"detail"</span><span style="color:var(--text-muted)">:</span> <span style="color:#a5d6ff">"Human readable message."</span><br/>
+        <span style="color:var(--text-muted)">}</span>
+      </div>
+    </section>
+
+    <hr />
+
+    <!-- Configuration -->
+    <section id="configuration">
+      <h2><span class="section-icon">⚙️</span> Configuration</h2>
+      <p>Copy <code>.env.example</code> to <code>.env</code> and adjust values:</p>
+      <table class="config-table">
+        <thead>
+          <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>DATABASE_URL</td>
+            <td>sqlite+aiosqlite:///./linkvault.db</td>
+            <td>Async SQLAlchemy database connection string</td>
+          </tr>
+          <tr>
+            <td>SECRET_KEY</td>
+            <td>changeme-use-a-real-secret</td>
+            <td>Application secret — change before deploying</td>
+          </tr>
+          <tr>
+            <td>BASE_URL</td>
+            <td>http://localhost:8000</td>
+            <td>Public base URL used when generating short links</td>
+          </tr>
+          <tr>
+            <td>LOG_LEVEL</td>
+            <td>INFO</td>
+            <td>Logging verbosity (<code>DEBUG</code>, <code>INFO</code>, <code>WARNING</code>, …)</td>
+          </tr>
+          <tr>
+            <td>SCHEDULER_DB_URL</td>
+            <td>sqlite:///./scheduler.db</td>
+            <td>Persistent store for APScheduler job state</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="margin-top:0.75rem;font-size:0.875rem;color:var(--text-muted);">
+        All settings are validated at startup via <code>pydantic-settings</code>. The application will <strong>fail loudly</strong> if required settings are missing or malformed.
+      </p>
+    </section>
+
+    <hr />
+
+    <!-- Project Structure -->
+    <section id="project-structure">
+      <h2><span class="section-icon">📁</span> Project Structure</h2>
+      <div class="file-tree">
+        <span class="tree-dir">linkvault/</span><br/>
+        ├── AGENTS.md<br/>
+        ├── README.md<br/>
+        ├── pyproject.toml<br/>
+        ├── .env.example<br/>
+        ├── alembic.ini<br/>
+        ├── <span class="tree-dir">alembic/</span><br/>
+        │   └── <span class="tree-dir">versions/</span><br/>
+        ├── <span class="tree-dir">linkvault/</span><br/>
+        │   ├── <span class="tree-file">main.py</span>              <span class="tree-comment"># FastAPI app factory</span><br/>
+        │   ├── <span class="tree-file">config.py</span>            <span class="tree-comment"># Pydantic Settings</span><br/>
+        │   ├── <span class="tree-file">database.py</span>          <span class="tree-comment"># Async SQLAlchemy engine + session</span><br/>
+        │   ├── <span class="tree-dir">models/</span><br/>
+        │   │   ├── <span class="tree-file">link.py</span>          <span class="tree-comment"># Link ORM model</span><br/>
+        │   │   ├── <span class="tree-file">click.py</span>         <span class="tree-comment"># Click event ORM model</span><br/>
+        │   │   └── <span class="tree-file">user.py</span>          <span class="tree-comment"># User + API key ORM model</span><br/>
+        │   ├── <span class="tree-dir">schemas/</span><br/>
+        │   │   ├── <span class="tree-file">link.py</span>          <span class="tree-comment"># Pydantic request/response schemas</span><br/>
+        │   │   ├── <span class="tree-file">click.py</span><br/>
+        │   │   └── <span class="tree-file">user.py</span><br/>
+        │   ├── <span class="tree-dir">api/</span><br/>
+        │   │   ├── <span class="tree-file">deps.py</span>          <span class="tree-comment"># Shared dependencies (auth, DB session)</span><br/>
+        │   │   ├── <span class="tree-file">links.py</span>         <span class="tree-comment"># /links router</span><br/>
+        │   │   ├── <span class="tree-file">redirects.py</span>     <span class="tree-comment"># /{slug} redirect router</span><br/>
+        │   │   ├── <span class="tree-file">analytics.py</span>     <span class="tree-comment"># /analytics router</span><br/>
+        │   │   └── <span class="tree-file">users.py</span>         <span class="tree-comment"># /users router</span><br/>
+        │   ├── <span class="tree-dir">services/</span><br/>
+        │   │   ├── <span class="tree-file">shortener.py</span>     <span class="tree-comment"># Slug generation (Base58, collision-safe)</span><br/>
+        │   │   ├── <span class="tree-file">analytics.py</span>     <span class="tree-comment"># Click aggregation logic</span><br/>
+        │   │   └── <span class="tree-file">cleanup.py</span>       <span class="tree-comment"># Expired link purge job</span><br/>
+        │   └── <span class="tree-dir">cli/</span><br/>
+        │       └── <span class="tree-file">app.py</span>           <span class="tree-comment"># Typer CLI app</span><br/>
+        └── <span class="tree-dir">tests/</span><br/>
+            ├── <span class="tree-file">conftest.py</span><br/>
+            ├── <span class="tree-file">test_links.py</span><br/>
+            ├── <span class="tree-file">test_redirects.py</span><br/>
+            ├── <span class="tree-file">test_analytics.py</span><br/>
+            └── <span class="tree-file">test_auth.py</span>
+      </div>
+    </section>
+
+    <hr />
+
+    <!-- Design Decisions -->
+    <section id="design-decisions">
+      <h2><span class="section-icon">🏗️</span> Design Decisions</h2>
+      <p>See <a href="DECISIONS.md"><code>DECISIONS.md</code></a> for the full rationale. Key choices:</p>
+      <ul class="decision-list">
+        <li class="decision-item">
+          <strong>Slug Collision Strategy</strong>
+          <p>Up to 5 retries with exponential back-off before returning a <code>409 Conflict</code>. Probability of exhaustion at normal scale is negligible.</p>
+        </li>
+        <li class="decision-item">
+          <strong>Click-Count Consistency</strong>
+          <p><code>links.click_count</code> is the authoritative counter (atomically incremented via <code>UPDATE … SET click_count = click_count + 1</code>). The <code>clicks</code> table is used exclusively for detailed analytics. A discrepancy caused by a failed insert is acceptable and self-documents in logs.</p>
+        </li>
+        <li class="decision-item">
+          <strong>Soft-Delete and Analytics</strong>
+          <p>Clicks are tied to <code>link_id</code> (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.</p>
+        </li>
+        <li class="decision-item">
+          <strong>Naive Datetime Handling</strong>
+          <p>Datetimes without a timezone offset are assumed to be <strong>UTC</strong> and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.</p>
+        </li>
+        <li class="decision-item">
+          <strong>Rate Limiting</strong>
+          <p>No rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.</p>
+        </li>
+      </ul>
+    </section>
+
+    <footer>
+      <p>LinkVault &mdash; built with ❤️ using <a href="https://fastapi.tiangolo.com/" target="_blank">FastAPI</a> &middot; <a href="https://github.com/garmstro/forge-test-project" target="_blank">View on GitHub</a></p>
+    </footer>
+
+  </main>
+</div>
+
+</body>
+</html>
