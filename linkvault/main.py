@@ -11,6 +11,7 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.rate_limit_middleware import RateLimitMiddleware
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -21,6 +22,16 @@ def create_app() -> FastAPI:
         title="LinkVault",
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
+    )
+
+    # ------------------------------------------------------------------
+    # Rate limiting middleware (IP-based)
+    # ------------------------------------------------------------------
+    application.add_middleware(
+        RateLimitMiddleware,
+        requests_per_minute=settings.RATE_LIMIT_IP_PER_MINUTE,
+        requests_per_hour=settings.RATE_LIMIT_IP_PER_HOUR,
+        excluded_paths=settings.get_excluded_paths(),
     )
 
     # ------------------------------------------------------------------
