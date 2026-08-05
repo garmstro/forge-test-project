@@ -30,7 +30,12 @@ def _to_tz_date(dt_utc: datetime, tz_name: str) -> date:
     """Convert a naive UTC datetime to a date in the given IANA timezone."""
     import zoneinfo
 
-    tz = zoneinfo.ZoneInfo(tz_name)
+    # Handle UTC specially since it's not in the zoneinfo database
+    if tz_name == "UTC":
+        tz = timezone.utc
+    else:
+        tz = zoneinfo.ZoneInfo(tz_name)
+    
     aware = dt_utc.replace(tzinfo=timezone.utc)
     return aware.astimezone(tz).date()
 
@@ -54,7 +59,9 @@ async def get_link_analytics(
 
     # Validate timezone early — raises ZoneInfoNotFoundError on bad input
     try:
-        zoneinfo.ZoneInfo(tz)
+        # Handle 'UTC' as a special case (it's not in the zoneinfo database)
+        if tz != "UTC":
+            zoneinfo.ZoneInfo(tz)
     except (zoneinfo.ZoneInfoNotFoundError, KeyError):
         raise ValueError(f"Unknown timezone: {tz!r}")
 
@@ -236,4 +243,3 @@ async def get_user_summary(
         "clicks_last_30_days": clicks_30d,
         "top_link": top_link,
     }
-
