@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.database import get_db
+from linkvault.middleware.rate_limiter import limiter
 from linkvault.models.click import Click
 from linkvault.models.link import Link
 
@@ -31,6 +32,7 @@ def _anonymize_ip(ip: str | None) -> str | None:
 
 
 @router.get("/{slug}", response_model=None)
+@limiter.limit("1000/hour")
 async def redirect(
     slug: str,
     request: Request,
@@ -117,4 +119,3 @@ async def redirect(
         url=link.destination_url,
         status_code=status_code,
     )
-
