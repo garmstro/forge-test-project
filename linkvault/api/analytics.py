@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.api.deps import get_current_user
 from linkvault.database import get_db
+from linkvault.middleware.rate_limiter import limiter
 from linkvault.models.link import Link
 from linkvault.models.user import User
 from linkvault.schemas.analytics import LinkAnalyticsResponse, SummaryResponse
@@ -21,7 +22,9 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 @router.get("/summary", response_model=SummaryResponse)
+@limiter.limit("200/hour")
 async def analytics_summary(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SummaryResponse:
@@ -36,7 +39,9 @@ async def analytics_summary(
 
 
 @router.get("/{slug}", response_model=LinkAnalyticsResponse)
+@limiter.limit("200/hour")
 async def analytics_for_slug(
+    request: Request,
     slug: str,
     days: int = Query(default=30, ge=1, le=365),
     tz: str = Query(default="UTC"),
@@ -75,4 +80,3 @@ async def analytics_for_slug(
         )
 
     return LinkAnalyticsResponse(**data)
-

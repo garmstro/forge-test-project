@@ -4,11 +4,12 @@ import hashlib
 import uuid
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.database import get_db
+from linkvault.middleware.rate_limiter import limiter
 from linkvault.models.user import User
 from linkvault.schemas.user import (
     TokenResponse,
@@ -37,7 +38,9 @@ def _hash_api_key(raw_key: str) -> str:
     response_model=UserRegisterResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("5/minute")
 async def register(
+    request: Request,
     payload: UserRegister,
     db: AsyncSession = Depends(get_db),
 ) -> UserRegisterResponse:
@@ -68,7 +71,9 @@ async def register(
 
 
 @router.post("/token", response_model=TokenResponse)
+@limiter.limit("10/minute")
 async def get_token(
+    request: Request,
     payload: UserLogin,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
@@ -92,4 +97,3 @@ async def get_token(
     await db.flush()  # ensure the new hash is visible within this transaction
 
     return TokenResponse(api_key=raw_key)
-

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.api.deps import get_current_user
 from linkvault.database import get_db
+from linkvault.middleware.rate_limiter import limiter
 from linkvault.models.link import Link
 from linkvault.models.user import User
 from linkvault.schemas.link import (
@@ -55,7 +56,9 @@ async def _resolve_active_link(slug: str, user: User, db: AsyncSession) -> Link:
 
 
 @router.post("", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("100/hour")
 async def create_link(
+    request: Request,
     payload: LinkCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -122,7 +125,9 @@ async def create_link(
 
 
 @router.get("", response_model=PaginatedLinksResponse)
+@limiter.limit("200/hour")
 async def list_links(
+    request: Request,
     page: int = 1,
     page_size: int = 20,
     current_user: User = Depends(get_current_user),
@@ -166,7 +171,9 @@ async def list_links(
 
 
 @router.get("/{slug}", response_model=LinkResponse)
+@limiter.limit("200/hour")
 async def get_link(
+    request: Request,
     slug: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -182,7 +189,9 @@ async def get_link(
 
 
 @router.patch("/{slug}", response_model=LinkResponse)
+@limiter.limit("100/hour")
 async def update_link(
+    request: Request,
     slug: str,
     payload: LinkUpdate,
     current_user: User = Depends(get_current_user),
@@ -213,7 +222,9 @@ async def update_link(
 
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("100/hour")
 async def delete_link(
+    request: Request,
     slug: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -223,4 +234,3 @@ async def delete_link(
     link.deleted_at = datetime.utcnow()
     db.add(link)
     await db.flush()
-

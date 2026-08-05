@@ -41,9 +41,30 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 ## 5. Rate Limiting
 
-**Decision:** **No application-level rate limiting** is implemented in this phase.
+**Decision:** **Application-level rate limiting** is implemented using `slowapi` with per-IP and per-user limits.
 
-**Rationale:** The redirect endpoint is designed for sub-10 ms resolution via a single indexed DB lookup. Infrastructure-level rate limiting (e.g., nginx `limit_req`, Caddy rate-limit middleware, or a cloud WAF) is the recommended approach for production deployments and avoids adding latency or complexity to the hot path. This decision is revisable in a future phase.
+**Rationale:** While infrastructure-level rate limiting (e.g., nginx `limit_req`, Caddy rate-limit middleware, or a cloud WAF) is recommended for production deployments, application-level rate limiting provides:
+1. **Fine-grained control** — different limits for different endpoints and user types
+2. **User-based limiting** — authenticated endpoints are limited per user ID, preventing a single user from exhausting shared resources
+3. **Defense in depth** — complements infrastructure-level protections
+4. **Development/testing convenience** — works out-of-the-box without additional infrastructure
+
+**Implementation details:**
+- Public endpoints (registration, login, redirects) are limited by IP address
+- Authenticated endpoints (links CRUD, analytics) are limited by user ID
+- The redirect endpoint maintains sub-10 ms performance via a single indexed DB lookup; rate limiting adds negligible overhead
+- Limits are configurable per endpoint:
+  - Registration: 5 requests/minute per IP
+  - Login: 10 requests/minute per IP
+  - Link creation: 100 requests/hour per user
+  - Link listing/retrieval: 200 requests/hour per user
+  - Link updates/deletes: 100 requests/hour per user
+  - Redirects: 1000 requests/hour per IP
+
+**Trade-offs:**
+- Adds minimal latency (< 1 ms) to each request
+- Requires in-memory storage for rate limit counters (handled by slowapi)
+- Infrastructure-level rate limiting should still be deployed for DDoS protection
 
 ---
 
@@ -52,4 +73,3 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 **Decision:** Each call to `POST /users/token` **generates and persists a new API key**, invalidating the previous one.
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
-
