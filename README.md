@@ -287,3 +287,6 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectu
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
 - **Rate limiting** — no rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.
 
+---
+
+*This README was edited by Forge.*
