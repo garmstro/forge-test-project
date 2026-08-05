@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     # Application version
     VERSION: str = "0.1.0"
 
+    # Rate limiting
+    RATE_LIMIT_IP_PER_MINUTE: int = 60
+    RATE_LIMIT_IP_PER_HOUR: int = 1000
+    RATE_LIMIT_USER_PER_MINUTE: int = 30
+    RATE_LIMIT_USER_PER_HOUR: int = 500
+    RATE_LIMIT_EXCLUDED_PATHS: str = "/health,/docs,/openapi.json,/redoc"
+
     def validate_required(self) -> None:
         """Call on startup to fail loudly if critical settings are missing."""
         if not self.SECRET_KEY:
@@ -29,6 +36,10 @@ class Settings(BaseSettings):
                 "SECRET_KEY is not set. "
                 "Copy .env.example to .env and set a real secret key."
             )
+
+    def get_excluded_paths(self) -> list[str]:
+        """Parse excluded paths from comma-separated string."""
+        return [p.strip() for p in self.RATE_LIMIT_EXCLUDED_PATHS.split(",") if p.strip()]
 
 
 settings = Settings()
