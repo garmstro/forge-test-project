@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from linkvault.api.deps import check_ip_rate_limit
 from linkvault.database import get_db
 from linkvault.models.user import User
 from linkvault.schemas.user import (
@@ -40,8 +41,12 @@ def _hash_api_key(raw_key: str) -> str:
 async def register(
     payload: UserRegister,
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_ip_rate_limit),
 ) -> UserRegisterResponse:
-    """Register a new user.  Returns a one-time plaintext API key."""
+    """Register a new user.  Returns a one-time plaintext API key.
+    
+    Rate limited by IP address.
+    """
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(
@@ -71,11 +76,14 @@ async def register(
 async def get_token(
     payload: UserLogin,
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_ip_rate_limit),
 ) -> TokenResponse:
     """Exchange email + password for the plaintext API key.
 
     Decision (see DECISIONS.md §6): a new API key is generated and persisted on
     every call, invalidating the previous one.
+    
+    Rate limited by IP address.
     """
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
@@ -92,4 +100,3 @@ async def get_token(
     await db.flush()  # ensure the new hash is visible within this transaction
 
     return TokenResponse(api_key=raw_key)
-

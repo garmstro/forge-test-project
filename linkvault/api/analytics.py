@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from linkvault.api.deps import get_current_user
+from linkvault.api.deps import check_user_rate_limit, get_current_user
 from linkvault.database import get_db
 from linkvault.models.link import Link
 from linkvault.models.user import User
@@ -24,8 +24,12 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 async def analytics_summary(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_user_rate_limit),
 ) -> SummaryResponse:
-    """Return aggregate analytics across all of the authenticated user's links."""
+    """Return aggregate analytics across all of the authenticated user's links.
+    
+    Rate limited per authenticated user.
+    """
     data = await get_user_summary(current_user.id, db)
     return SummaryResponse(**data)
 
@@ -42,10 +46,13 @@ async def analytics_for_slug(
     tz: str = Query(default="UTC"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_user_rate_limit),
 ) -> LinkAnalyticsResponse:
     """Return per-link analytics for *slug* over the past *days* days.
 
     Only the owner of the link may access its analytics.
+    
+    Rate limited per authenticated user.
     """
     # Resolve the active link
     result = await db.execute(
@@ -75,4 +82,3 @@ async def analytics_for_slug(
         )
 
     return LinkAnalyticsResponse(**data)
-
