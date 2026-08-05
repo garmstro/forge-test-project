@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     # Application version
     VERSION: str = "0.1.0"
 
+    # Rate limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_USER_PER_MINUTE: int = 60
+    RATE_LIMIT_USER_PER_HOUR: int = 1000
+    RATE_LIMIT_IP_PER_MINUTE: int = 30
+    RATE_LIMIT_IP_PER_HOUR: int = 500
+
     def validate_required(self) -> None:
         """Call on startup to fail loudly if critical settings are missing."""
         if not self.SECRET_KEY:
