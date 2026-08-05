@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import hashlib
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.database import get_db
 from linkvault.models.user import User
+from linkvault.services.rate_limit import RateLimitService
 
 bearer_scheme = HTTPBearer()
 
@@ -40,3 +41,58 @@ async def get_current_user(
         )
     return user
 
+
+async def check_user_rate_limit(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """
+    FastAPI dependency that checks rate limits for authenticated users.
+    
+    Returns rate limit info dict for use in response headers.
+    Raises 429 if the user has exceeded their rate limit.
+    """
+    is_allowed, info = await RateLimitService.check_user_rate_limit(
+        current_user.id, db
+    )
+    
+    if not is_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please try again later.",
+            headers={
+                "X-RateLimit-Limit": str(info["limit"]),
+                "X-RateLimit-Remaining": str(info["remaining"]),
+                "X-RateLimit-Reset": str(info["reset_at"]),
+            },
+        )
+    
+    return info
+
+
+async def check_ip_rate_limit(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """
+    FastAPI dependency that checks rate limits for IP addresses (public endpoints).
+    
+    Returns rate limit info dict for use in response headers.
+    Raises 429 if the IP has exceeded their rate limit.
+    """
+    ip_address = request.client.host if request.client else "unknown"
+    
+    is_allowed, info = await RateLimitService.check_ip_rate_limit(ip_address, db)
+    
+    if not is_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please try again later.",
+            headers={
+                "X-RateLimit-Limit": str(info["limit"]),
+                "X-RateLimit-Remaining": str(info["remaining"]),
+                "X-RateLimit-Reset": str(info["reset_at"]),
+            },
+        )
+    
+    return info

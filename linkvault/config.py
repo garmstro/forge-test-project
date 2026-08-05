@@ -22,6 +22,20 @@ class Settings(BaseSettings):
     # Application version
     VERSION: str = "0.1.0"
 
+    # Rate Limiting
+    # Requests per window for authenticated users
+    RATE_LIMIT_AUTHENTICATED_REQUESTS: int = 100
+    # Window duration in seconds for authenticated users
+    RATE_LIMIT_AUTHENTICATED_WINDOW_SECONDS: int = 60
+    
+    # Requests per window for unauthenticated/IP-based limiting
+    RATE_LIMIT_IP_REQUESTS: int = 30
+    # Window duration in seconds for IP-based limiting
+    RATE_LIMIT_IP_WINDOW_SECONDS: int = 60
+    
+    # Enable/disable rate limiting globally
+    RATE_LIMITING_ENABLED: bool = True
+
     def validate_required(self) -> None:
         """Call on startup to fail loudly if critical settings are missing."""
         if not self.SECRET_KEY:
@@ -32,4 +46,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

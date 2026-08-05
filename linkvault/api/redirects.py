@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from linkvault.api.deps import check_ip_rate_limit
 from linkvault.database import get_db
 from linkvault.models.click import Click
 from linkvault.models.link import Link
@@ -35,6 +36,7 @@ async def redirect(
     slug: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_ip_rate_limit),
 ) -> RedirectResponse | JSONResponse:
     """Resolve *slug* → destination URL and record a click event.
 
@@ -43,6 +45,8 @@ async def redirect(
     - 302  Temporary redirect (link has an expiry or click cap).
     - 404  Slug not found.
     - 410  Link expired or click cap reached.
+    
+    Rate limited by IP address.
     """
     # ------------------------------------------------------------------
     # Single indexed lookup — must complete in < 10 ms at the DB level.
@@ -117,4 +121,3 @@ async def redirect(
         url=link.destination_url,
         status_code=status_code,
     )
-

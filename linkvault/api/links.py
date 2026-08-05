@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from linkvault.api.deps import get_current_user
+from linkvault.api.deps import check_user_rate_limit, get_current_user
 from linkvault.database import get_db
 from linkvault.models.link import Link
 from linkvault.models.user import User
@@ -59,8 +59,12 @@ async def create_link(
     payload: LinkCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_user_rate_limit),
 ) -> LinkResponse:
-    """Create a new short link for the authenticated user."""
+    """Create a new short link for the authenticated user.
+    
+    Rate limited per authenticated user.
+    """
 
     # ---- Determine slug -----------------------------------------------
     if payload.slug is not None:
@@ -127,8 +131,12 @@ async def list_links(
     page_size: int = 20,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_user_rate_limit),
 ) -> PaginatedLinksResponse:
-    """Return a paginated list of the authenticated user's active links."""
+    """Return a paginated list of the authenticated user's active links.
+    
+    Rate limited per authenticated user.
+    """
     if page < 1:
         page = 1
     page_size = min(max(page_size, 1), 100)
@@ -170,8 +178,12 @@ async def get_link(
     slug: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_user_rate_limit),
 ) -> LinkResponse:
-    """Return full metadata for a single link owned by the authenticated user."""
+    """Return full metadata for a single link owned by the authenticated user.
+    
+    Rate limited per authenticated user.
+    """
     link = await _resolve_active_link(slug, current_user, db)
     return LinkResponse.model_validate(link)
 
@@ -187,10 +199,13 @@ async def update_link(
     payload: LinkUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_user_rate_limit),
 ) -> LinkResponse:
     """Update url, expires_at, or max_clicks on an existing link.
 
     Slug and owner are immutable.
+    
+    Rate limited per authenticated user.
     """
     link = await _resolve_active_link(slug, current_user, db)
 
@@ -217,10 +232,13 @@ async def delete_link(
     slug: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(check_user_rate_limit),
 ) -> None:
-    """Soft-delete a link (sets deleted_at). The slug becomes immediately reusable."""
+    """Soft-delete a link (sets deleted_at). The slug becomes immediately reusable.
+    
+    Rate limited per authenticated user.
+    """
     link = await _resolve_active_link(slug, current_user, db)
     link.deleted_at = datetime.utcnow()
     db.add(link)
     await db.flush()
-
