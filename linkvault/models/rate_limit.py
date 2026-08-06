@@ -10,37 +10,29 @@ from linkvault.database import Base
 
 
 class RateLimitState(Base):
-    """Tracks rate limit state per user/IP for persistence across server restarts."""
-
+    """
+    Tracks rate limit state for users and IP addresses.
+    
+    Each row represents a rate limit window for a specific user_id or ip_address.
+    The window_start timestamp marks when the current rate limit window began.
+    request_count tracks requests within the current window.
+    """
     __tablename__ = "rate_limit_state"
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    # Either user_id or ip_address will be set, depending on the rate limit key
-    user_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True, index=True
-    )
-    ip_address: Mapped[str | None] = mapped_column(
-        String(45), nullable=True, index=True
-    )
-    # Request counts for different time windows
-    requests_this_minute: Mapped[int] = mapped_column(Integer, default=0)
-    requests_this_hour: Mapped[int] = mapped_column(Integer, default=0)
-    requests_this_day: Mapped[int] = mapped_column(Integer, default=0)
-    # Timestamps for window resets
-    minute_window_reset_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
-    )
-    hour_window_reset_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
-    )
-    day_window_reset_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+    # Either user_id or ip_address is set, but not both
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True, index=True)
+    
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow
+        DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow, onupdate=datetime.utcnow
     )
