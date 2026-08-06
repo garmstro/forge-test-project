@@ -11,6 +11,7 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.services.rate_limiter import RateLimitConfig
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -24,7 +25,20 @@ def create_app() -> FastAPI:
     )
 
     # ------------------------------------------------------------------
-    # Custom error envelope: {"error": "...", "detail": "..."}
+    # Initialize rate limiter with config from settings
+    # ------------------------------------------------------------------
+    from linkvault.api.rate_limit import get_rate_limiter
+
+    rate_limit_config = RateLimitConfig(
+        user_requests_per_minute=settings.RATE_LIMIT_USER_REQUESTS_PER_MINUTE,
+        user_requests_per_hour=settings.RATE_LIMIT_USER_REQUESTS_PER_HOUR,
+        ip_requests_per_minute=settings.RATE_LIMIT_IP_REQUESTS_PER_MINUTE,
+        ip_requests_per_hour=settings.RATE_LIMIT_IP_REQUESTS_PER_HOUR,
+    )
+    get_rate_limiter(rate_limit_config)
+
+    # ------------------------------------------------------------------
+    # Custom error envelope: {\"error\": \"...\", \"detail\": \"...\"}
     # ------------------------------------------------------------------
     @application.exception_handler(RequestValidationError)
     async def validation_exception_handler(
@@ -70,4 +84,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

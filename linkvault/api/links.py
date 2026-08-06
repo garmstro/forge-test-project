@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.api.deps import get_current_user
+from linkvault.api.rate_limit import check_user_rate_limit
 from linkvault.database import get_db
 from linkvault.models.link import Link
 from linkvault.models.user import User
@@ -57,7 +58,7 @@ async def _resolve_active_link(slug: str, user: User, db: AsyncSession) -> Link:
 @router.post("", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
 async def create_link(
     payload: LinkCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(check_user_rate_limit),
     db: AsyncSession = Depends(get_db),
 ) -> LinkResponse:
     """Create a new short link for the authenticated user."""
@@ -125,7 +126,7 @@ async def create_link(
 async def list_links(
     page: int = 1,
     page_size: int = 20,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(check_user_rate_limit),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedLinksResponse:
     """Return a paginated list of the authenticated user's active links."""
@@ -168,7 +169,7 @@ async def list_links(
 @router.get("/{slug}", response_model=LinkResponse)
 async def get_link(
     slug: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(check_user_rate_limit),
     db: AsyncSession = Depends(get_db),
 ) -> LinkResponse:
     """Return full metadata for a single link owned by the authenticated user."""
@@ -185,7 +186,7 @@ async def get_link(
 async def update_link(
     slug: str,
     payload: LinkUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(check_user_rate_limit),
     db: AsyncSession = Depends(get_db),
 ) -> LinkResponse:
     """Update url, expires_at, or max_clicks on an existing link.
@@ -215,7 +216,7 @@ async def update_link(
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_link(
     slug: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(check_user_rate_limit),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Soft-delete a link (sets deleted_at). The slug becomes immediately reusable."""
@@ -223,4 +224,3 @@ async def delete_link(
     link.deleted_at = datetime.utcnow()
     db.add(link)
     await db.flush()
-

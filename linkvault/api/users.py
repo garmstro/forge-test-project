@@ -4,10 +4,11 @@ import hashlib
 import uuid
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from linkvault.api.rate_limit import check_ip_rate_limit
 from linkvault.database import get_db
 from linkvault.models.user import User
 from linkvault.schemas.user import (
@@ -39,6 +40,7 @@ def _hash_api_key(raw_key: str) -> str:
 )
 async def register(
     payload: UserRegister,
+    _: str = Depends(check_ip_rate_limit),
     db: AsyncSession = Depends(get_db),
 ) -> UserRegisterResponse:
     """Register a new user.  Returns a one-time plaintext API key."""
@@ -70,6 +72,7 @@ async def register(
 @router.post("/token", response_model=TokenResponse)
 async def get_token(
     payload: UserLogin,
+    _: str = Depends(check_ip_rate_limit),
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """Exchange email + password for the plaintext API key.
@@ -92,4 +95,3 @@ async def get_token(
     await db.flush()  # ensure the new hash is visible within this transaction
 
     return TokenResponse(api_key=raw_key)
-
