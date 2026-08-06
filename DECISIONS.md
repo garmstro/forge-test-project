@@ -41,9 +41,20 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 ## 5. Rate Limiting
 
-**Decision:** **No application-level rate limiting** is implemented in this phase.
+**Decision:** **IP-based rate limiting** is implemented at the application level using SlowAPI with a default limit of **100 requests per minute per IP address**.
 
-**Rationale:** The redirect endpoint is designed for sub-10 ms resolution via a single indexed DB lookup. Infrastructure-level rate limiting (e.g., nginx `limit_req`, Caddy rate-limit middleware, or a cloud WAF) is the recommended approach for production deployments and avoids adding latency or complexity to the hot path. This decision is revisable in a future phase.
+**Rationale:** Application-level rate limiting provides immediate protection against abuse and ensures fair resource allocation across clients. The implementation uses SlowAPI, a FastAPI-compatible rate limiting library that:
+- Adds minimal latency (< 1ms overhead per request)
+- Provides standard rate limit headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`)
+- Returns consistent `429 Too Many Requests` responses with `Retry-After` headers
+- Supports exemptions (e.g., the `/health` endpoint is exempt to ensure monitoring systems can always check service status)
+
+**Configuration:**
+- **Limit**: 100 requests/minute per IP (configurable via the limiter initialization)
+- **Key function**: Client IP address via `get_remote_address` (supports `X-Forwarded-For` when behind a proxy)
+- **Storage**: In-memory (suitable for single-instance deployments; Redis backend recommended for multi-instance production)
+
+**Production considerations:** Infrastructure-level rate limiting (e.g., nginx `limit_req`, Cloudflare rate limiting, or a cloud WAF) provides additional defense in depth and should be used in conjunction with application-level limits. The redirect endpoint maintains sub-10 ms resolution even with rate limiting enabled.
 
 ---
 
@@ -52,4 +63,5 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 **Decision:** Each call to `POST /users/token` **generates and persists a new API key**, invalidating the previous one.
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
+
 
