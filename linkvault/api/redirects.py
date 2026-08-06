@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from linkvault.api.rate_limit import check_ip_rate_limit
 from linkvault.database import get_db
 from linkvault.models.click import Click
 from linkvault.models.link import Link
@@ -34,6 +35,7 @@ def _anonymize_ip(ip: str | None) -> str | None:
 async def redirect(
     slug: str,
     request: Request,
+    _: str = Depends(check_ip_rate_limit),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse | JSONResponse:
     """Resolve *slug* → destination URL and record a click event.
@@ -117,4 +119,3 @@ async def redirect(
         url=link.destination_url,
         status_code=status_code,
     )
-
