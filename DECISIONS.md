@@ -41,9 +41,16 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 ## 5. Rate Limiting
 
-**Decision:** **No application-level rate limiting** is implemented in this phase.
+**Decision:** **Application-level rate limiting is implemented** using the `slowapi` library with per-endpoint limits.
 
-**Rationale:** The redirect endpoint is designed for sub-10 ms resolution via a single indexed DB lookup. Infrastructure-level rate limiting (e.g., nginx `limit_req`, Caddy rate-limit middleware, or a cloud WAF) is the recommended approach for production deployments and avoids adding latency or complexity to the hot path. This decision is revisable in a future phase.
+**Rationale:** 
+- The redirect endpoint (`GET /{slug}`) is the highest-volume path and is rate-limited at **1000 requests/minute** per IP address to protect against abuse while maintaining sub-10ms latency.
+- Authentication endpoints (`POST /users/register`, `POST /users/token`) are rate-limited at **10 requests/minute** per IP to prevent brute-force attacks.
+- General API endpoints (`POST /links`, `GET /links`, `PATCH /links`, `DELETE /links`, `/analytics/*`) are rate-limited at **100 requests/minute** per IP to prevent resource exhaustion.
+- Rate limits are configurable via environment variables (`RATE_LIMIT_REDIRECT`, `RATE_LIMIT_API`, `RATE_LIMIT_AUTH`) and can be disabled entirely with `RATE_LIMIT_ENABLED=false` for local development or testing.
+- Rate limit exceeded responses return HTTP 429 with a consistent error envelope: `{"error": "rate_limit_exceeded", "detail": "Too many requests. Please try again later."}`.
+- The implementation uses IP address as the rate limit key for public endpoints and can be extended to use user ID for authenticated endpoints in future phases.
+- This approach balances security, performance, and operational flexibility: it prevents common abuse patterns without adding significant latency to the hot path, and operators can adjust limits based on their deployment environment.
 
 ---
 

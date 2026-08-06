@@ -10,6 +10,7 @@ from linkvault.api.deps import get_current_user
 from linkvault.database import get_db
 from linkvault.models.link import Link
 from linkvault.models.user import User
+from linkvault.rate_limit import limiter
 from linkvault.schemas.link import (
     LinkCreate,
     LinkResponse,
@@ -55,6 +56,7 @@ async def _resolve_active_link(slug: str, user: User, db: AsyncSession) -> Link:
 
 
 @router.post("", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("100/minute")
 async def create_link(
     payload: LinkCreate,
     current_user: User = Depends(get_current_user),
@@ -122,6 +124,7 @@ async def create_link(
 
 
 @router.get("", response_model=PaginatedLinksResponse)
+@limiter.limit("100/minute")
 async def list_links(
     page: int = 1,
     page_size: int = 20,
@@ -166,6 +169,7 @@ async def list_links(
 
 
 @router.get("/{slug}", response_model=LinkResponse)
+@limiter.limit("100/minute")
 async def get_link(
     slug: str,
     current_user: User = Depends(get_current_user),
@@ -182,6 +186,7 @@ async def get_link(
 
 
 @router.patch("/{slug}", response_model=LinkResponse)
+@limiter.limit("100/minute")
 async def update_link(
     slug: str,
     payload: LinkUpdate,
@@ -213,6 +218,7 @@ async def update_link(
 
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("100/minute")
 async def delete_link(
     slug: str,
     current_user: User = Depends(get_current_user),

@@ -8,6 +8,7 @@ from linkvault.api.deps import get_current_user
 from linkvault.database import get_db
 from linkvault.models.link import Link
 from linkvault.models.user import User
+from linkvault.rate_limit import limiter
 from linkvault.schemas.analytics import LinkAnalyticsResponse, SummaryResponse
 from linkvault.services.analytics import get_link_analytics, get_user_summary
 
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 @router.get("/summary", response_model=SummaryResponse)
+@limiter.limit("100/minute")
 async def analytics_summary(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -36,6 +38,7 @@ async def analytics_summary(
 
 
 @router.get("/{slug}", response_model=LinkAnalyticsResponse)
+@limiter.limit("100/minute")
 async def analytics_for_slug(
     slug: str,
     days: int = Query(default=30, ge=1, le=365),
