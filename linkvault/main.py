@@ -59,18 +59,9 @@ def create_app() -> FastAPI:
         )
 
     # ------------------------------------------------------------------
-    # Routers
-    # ------------------------------------------------------------------
-    application.include_router(users_router)
-    application.include_router(links_router)
-    application.include_router(analytics_router)
-    application.include_router(redirects_router)  # must be last (catches /{slug})
-
-    # ------------------------------------------------------------------
-    # Health endpoint
+    # Health endpoint (must be defined before redirects router)
     # ------------------------------------------------------------------
     @application.get("/health", tags=["health"])
-    @limiter.exempt
     async def health() -> dict[str, str]:
         return {
             "status": "ok",
@@ -78,6 +69,17 @@ def create_app() -> FastAPI:
             "scheduler": "not_started",
             "version": settings.VERSION,
         }
+    
+    # Mark health endpoint as exempt from rate limiting
+    limiter.exempt(health)
+
+    # ------------------------------------------------------------------
+    # Routers
+    # ------------------------------------------------------------------
+    application.include_router(users_router)
+    application.include_router(links_router)
+    application.include_router(analytics_router)
+    application.include_router(redirects_router)  # must be last (catches /{slug})
 
     return application
 
