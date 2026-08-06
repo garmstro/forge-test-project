@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     # Application version
     VERSION: str = "0.1.0"
 
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REGISTER_PER_HOUR: int = 5  # per IP
+    RATE_LIMIT_TOKEN_PER_MINUTE: int = 10  # per IP
+    RATE_LIMIT_CREATE_LINK_PER_HOUR: int = 100  # per user
+    RATE_LIMIT_REDIRECT_PER_MINUTE: int = 1000  # per IP (high threshold for public endpoint)
+    RATE_LIMIT_REDIRECT_ENABLED: bool = False  # disabled by default for public endpoint
+
     def validate_required(self) -> None:
         """Call on startup to fail loudly if critical settings are missing."""
         if not self.SECRET_KEY:

@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from linkvault.api.deps import get_current_user
+from linkvault.api.deps import check_rate_limit_by_user, get_current_user
+from linkvault.config import settings
 from linkvault.database import get_db
 from linkvault.models.link import Link
 from linkvault.models.user import User
@@ -61,6 +62,12 @@ async def create_link(
     db: AsyncSession = Depends(get_db),
 ) -> LinkResponse:
     """Create a new short link for the authenticated user."""
+    # Rate limit: 100 requests per hour per user
+    await check_rate_limit_by_user(
+        current_user,
+        max_requests=settings.RATE_LIMIT_CREATE_LINK_PER_HOUR,
+        window_seconds=3600,
+    )
 
     # ---- Determine slug -----------------------------------------------
     if payload.slug is not None:
