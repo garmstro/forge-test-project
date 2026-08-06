@@ -5,6 +5,9 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from linkvault.api.analytics import router as analytics_router
 from linkvault.api.links import router as links_router
@@ -15,6 +18,9 @@ from linkvault.config import settings
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
+# Initialize rate limiter with 100 requests per minute per IP
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+
 
 def create_app() -> FastAPI:
     application = FastAPI(
@@ -22,6 +28,12 @@ def create_app() -> FastAPI:
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
     )
+
+    # ------------------------------------------------------------------
+    # Rate limiting
+    # ------------------------------------------------------------------
+    application.state.limiter = limiter
+    application.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # ------------------------------------------------------------------
     # Custom error envelope: {"error": "...", "detail": "..."}
@@ -58,6 +70,7 @@ def create_app() -> FastAPI:
     # Health endpoint
     # ------------------------------------------------------------------
     @application.get("/health", tags=["health"])
+    @limiter.exempt
     async def health() -> dict[str, str]:
         return {
             "status": "ok",
@@ -70,4 +83,5 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
 
