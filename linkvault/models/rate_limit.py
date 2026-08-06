@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, func, Index
+from sqlalchemy import DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from linkvault.database import Base
@@ -25,11 +25,6 @@ class RateLimitState(Base):
     window_start: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow
     )
-    created_at: Mapped[datetime] = mapped_column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow
-    )
-
-    __table_args__ = (
-        Index("ix_rate_limit_state_user_id_window", "user_id", "window_start"),
-        Index("ix_rate_limit_state_ip_address_window", "ip_address", "window_start"),
     )
