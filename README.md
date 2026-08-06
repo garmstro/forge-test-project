@@ -16,6 +16,7 @@
 - [Full Lifecycle Example (curl)](#full-lifecycle-example-curl)
 - [API Reference](#api-reference)
 - [Configuration](#configuration)
+- [Rate Limiting](#rate-limiting)
 - [Project Structure](#project-structure)
 - [Design Decisions](#design-decisions)
 
@@ -36,6 +37,7 @@ Everything runs **locally with zero paid dependencies** — no external services
 - **Click analytics** — per-link breakdown by day, unique IPs, top referers, and top user-agents; user-level summary across all links.
 - **Authentication** — email + password registration; API key (UUID4) issued on registration and exchangeable via `/users/token`; all protected routes use `Authorization: Bearer <api_key>`.
 - **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) expires links every 15 minutes and emits structured JSON log lines.
+- **Rate limiting** — configurable per-endpoint rate limits to prevent abuse and resource exhaustion; returns HTTP 429 when limits are exceeded.
 - **Terminal CLI** — `linkvault` command for every API operation, with Rich tables, bold-green short URLs, and a bar-chart view of daily click data.
 - **Health endpoint** — `/health` reports DB and scheduler status; returns `503` when the database is unreachable.
 
@@ -50,6 +52,7 @@ Everything runs **locally with zero paid dependencies** — no external services
 | Database | SQLite via SQLAlchemy 2.x (async) |
 | Migrations | Alembic |
 | Background Jobs | APScheduler |
+| Rate Limiting | slowapi |
 | CLI | Typer + Rich |
 | Testing | pytest + pytest-asyncio + httpx |
 | Config | Pydantic Settings (`.env`) |
@@ -191,19 +194,19 @@ curl -s "$BASE/health"
 
 ## API Reference
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/users/register` | ✗ | Register a new user; returns plaintext API key |
-| `POST` | `/users/token` | ✗ | Exchange email + password for the API key |
-| `GET` | `/health` | ✗ | Service health (DB + scheduler status) |
-| `GET` | `/{slug}` | ✗ | Redirect to destination URL; records click event |
-| `POST` | `/links` | ✓ | Create a new short link |
-| `GET` | `/links` | ✓ | Paginated list of the authenticated user's links |
-| `GET` | `/links/{slug}` | ✓ | Full metadata + live click count for one link |
-| `PATCH` | `/links/{slug}` | ✓ | Update `url`, `expires_at`, or `max_clicks` |
-| `DELETE` | `/links/{slug}` | ✓ | Soft-delete a link (slug immediately reusable) |
-| `GET` | `/analytics/{slug}` | ✓ | Per-link analytics (clicks by day, IPs, referers) |
-| `GET` | `/analytics/summary` | ✓ | Aggregate stats across all of the user's links |
+| Method | Path | Auth | Rate Limit | Description |
+|--------|------|------|-----------|-------------|
+| `POST` | `/users/register` | ✗ | 10/min | Register a new user; returns plaintext API key |
+| `POST` | `/users/token` | ✗ | 10/min | Exchange email + password for the API key |
+| `GET` | `/health` | ✗ | — | Service health (DB + scheduler status) |
+| `GET` | `/{slug}` | ✗ | 1000/min | Redirect to destination URL; records click event |
+| `POST` | `/links` | ✓ | 100/min | Create a new short link |
+| `GET` | `/links` | ✓ | 100/min | Paginated list of the authenticated user's links |
+| `GET` | `/links/{slug}` | ✓ | 100/min | Full metadata + live click count for one link |
+| `PATCH` | `/links/{slug}` | ✓ | 100/min | Update `url`, `expires_at`, or `max_clicks` |
+| `DELETE` | `/links/{slug}` | ✓ | 100/min | Soft-delete a link (slug immediately reusable) |
+| `GET` | `/analytics/{slug}` | ✓ | 100/min | Per-link analytics (clicks by day, IPs, referers) |
+| `GET` | `/analytics/summary` | ✓ | 100/min | Aggregate stats across all of the user's links |
 
 All error responses follow a consistent envelope:
 
@@ -211,6 +214,15 @@ All error responses follow a consistent envelope:
 {
   "error": "machine_readable_code",
   "detail": "Human readable message."
+}
+```
+
+Rate limit exceeded responses return HTTP 429:
+
+```json
+{
+  "error": "rate_limit_exceeded",
+  "detail": "Too many requests. Please try again later."
 }
 ```
 
@@ -226,9 +238,29 @@ SECRET_KEY=changeme-use-a-real-secret
 BASE_URL=http://localhost:8000
 LOG_LEVEL=INFO
 SCHEDULER_DB_URL=sqlite:///./scheduler.db
+
+# Rate Limiting Configuration
+RATE_LIMIT_REDIRECT=1000/minute
+RATE_LIMIT_API=100/minute
+RATE_LIMIT_AUTH=10/minute
+RATE_LIMIT_ENABLED=true
 ```
 
 All settings are validated at startup via `pydantic-settings`. The application will **fail loudly** if required settings are missing or malformed.
+
+---
+
+## Rate Limiting
+
+LinkVault implements application-level rate limiting to prevent abuse and resource exhaustion:
+
+- **Redirect endpoint** (`GET /{slug}`): **1000 requests/minute** per IP address
+- **Authentication endpoints** (`POST /users/register`, `POST /users/token`): **10 requests/minute** per IP address
+- **General API endpoints** (links, analytics): **100 requests/minute** per IP address
+
+Rate limits are applied per IP address and are configurable via environment variables. When a rate limit is exceeded, the API returns HTTP 429 with a consistent error response.
+
+To disable rate limiting (e.g., for local development or testing), set `RATE_LIMIT_ENABLED=false` in your `.env` file.
 
 ---
 
@@ -247,6 +279,7 @@ linkvault/
 │   ├── main.py              # FastAPI app factory
 │   ├── config.py            # Pydantic Settings
 │   ├── database.py          # Async SQLAlchemy engine + session
+│   ├── rate_limit.py        # Rate limiting configuration
 │   ├── models/
 │   │   ├── link.py          # Link ORM model
 │   │   ├── click.py         # Click event ORM model
@@ -285,5 +318,5 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectu
 - **Click-count consistency** — `links.click_count` is the authoritative counter (atomically incremented via `UPDATE … SET click_count = click_count + 1`); the `clicks` table is used exclusively for detailed analytics. A discrepancy caused by a failed insert is acceptable and self-documents in logs.
 - **Soft-delete and analytics** — clicks are tied to `link_id` (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
-- **Rate limiting** — no rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.
+- **Rate limiting** — application-level rate limiting is implemented using `slowapi` with configurable per-endpoint limits. The redirect endpoint is rate-limited at 1000 requests/minute, auth endpoints at 10 requests/minute, and general API endpoints at 100 requests/minute. Rate limits can be disabled for local development.
 

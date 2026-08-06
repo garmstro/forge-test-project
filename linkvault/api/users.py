@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.database import get_db
 from linkvault.models.user import User
+from linkvault.rate_limit import limiter
 from linkvault.schemas.user import (
     TokenResponse,
     UserLogin,
@@ -37,6 +38,7 @@ def _hash_api_key(raw_key: str) -> str:
     response_model=UserRegisterResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("10/minute")
 async def register(
     payload: UserRegister,
     db: AsyncSession = Depends(get_db),
@@ -68,6 +70,7 @@ async def register(
 
 
 @router.post("/token", response_model=TokenResponse)
+@limiter.limit("10/minute")
 async def get_token(
     payload: UserLogin,
     db: AsyncSession = Depends(get_db),

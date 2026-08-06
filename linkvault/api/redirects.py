@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from linkvault.database import get_db
 from linkvault.models.click import Click
 from linkvault.models.link import Link
+from linkvault.rate_limit import limiter
 
 router = APIRouter(tags=["redirects"])
 
@@ -31,6 +32,7 @@ def _anonymize_ip(ip: str | None) -> str | None:
 
 
 @router.get("/{slug}", response_model=None)
+@limiter.limit("1000/minute")
 async def redirect(
     slug: str,
     request: Request,
@@ -43,6 +45,7 @@ async def redirect(
     - 302  Temporary redirect (link has an expiry or click cap).
     - 404  Slug not found.
     - 410  Link expired or click cap reached.
+    - 429  Rate limit exceeded.
     """
     # ------------------------------------------------------------------
     # Single indexed lookup — must complete in < 10 ms at the DB level.

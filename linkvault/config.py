@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     # Application version
     VERSION: str = "0.1.0"
 
+    # Rate Limiting
+    # Format: "requests/time_window" (e.g., "100/minute", "1000/hour")
+    RATE_LIMIT_REDIRECT: str = "1000/minute"  # Redirect endpoint (public, high volume)
+    RATE_LIMIT_API: str = "100/minute"  # General API endpoints (authenticated)
+    RATE_LIMIT_AUTH: str = "10/minute"  # Auth endpoints (registration, token)
+    RATE_LIMIT_ENABLED: bool = True  # Can be disabled for testing or local development
+
     def validate_required(self) -> None:
         """Call on startup to fail loudly if critical settings are missing."""
         if not self.SECRET_KEY:
