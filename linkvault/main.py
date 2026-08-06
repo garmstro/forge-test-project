@@ -5,9 +5,12 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from linkvault.api.analytics import router as analytics_router
 from linkvault.api.links import router as links_router
+from linkvault.api.ratelimit import limiter, rate_limit_exceeded_handler
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
@@ -22,6 +25,12 @@ def create_app() -> FastAPI:
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
     )
+
+    # ------------------------------------------------------------------
+    # Rate limiting
+    # ------------------------------------------------------------------
+    application.state.limiter = limiter
+    application.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
     # ------------------------------------------------------------------
     # Custom error envelope: {"error": "...", "detail": "..."}
