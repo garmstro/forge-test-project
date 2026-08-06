@@ -15,6 +15,7 @@
 - [Running the Tests](#running-the-tests)
 - [Full Lifecycle Example (curl)](#full-lifecycle-example-curl)
 - [API Reference](#api-reference)
+- [Rate Limiting](#rate-limiting)
 - [Configuration](#configuration)
 - [Project Structure](#project-structure)
 - [Design Decisions](#design-decisions)
@@ -35,6 +36,7 @@ Everything runs **locally with zero paid dependencies** — no external services
 - **Redirect engine** — single-query slug resolution with atomic click-count increments; `301` for permanent links, `302` for capped/expiring ones, `410` when a link is exhausted.
 - **Click analytics** — per-link breakdown by day, unique IPs, top referers, and top user-agents; user-level summary across all links.
 - **Authentication** — email + password registration; API key (UUID4) issued on registration and exchangeable via `/users/token`; all protected routes use `Authorization: Bearer <api_key>`.
+- **Rate limiting** — IP-based rate limiting (100 requests per minute) protects all endpoints from abuse; rate limit headers included in responses.
 - **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) expires links every 15 minutes and emits structured JSON log lines.
 - **Terminal CLI** — `linkvault` command for every API operation, with Rich tables, bold-green short URLs, and a bar-chart view of daily click data.
 - **Health endpoint** — `/health` reports DB and scheduler status; returns `503` when the database is unreachable.
@@ -50,6 +52,7 @@ Everything runs **locally with zero paid dependencies** — no external services
 | Database | SQLite via SQLAlchemy 2.x (async) |
 | Migrations | Alembic |
 | Background Jobs | APScheduler |
+| Rate Limiting | SlowAPI |
 | CLI | Typer + Rich |
 | Testing | pytest + pytest-asyncio + httpx |
 | Config | Pydantic Settings (`.env`) |
@@ -216,6 +219,66 @@ All error responses follow a consistent envelope:
 
 ---
 
+## Rate Limiting
+
+LinkVault implements IP-based rate limiting to protect against abuse and ensure fair resource allocation.
+
+### Configuration
+
+- **Default limit**: 100 requests per minute per IP address
+- **Scope**: Applied globally to all endpoints except `/health`
+- **Key function**: Client IP address (supports X-Forwarded-For when behind a proxy)
+
+### Response Headers
+
+Every response includes rate limit information:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1234567890
+```
+
+- `X-RateLimit-Limit` — Maximum requests allowed in the current window
+- `X-RateLimit-Remaining` — Requests remaining in the current window
+- `X-RateLimit-Reset` — Unix timestamp when the rate limit resets
+
+### Rate Limit Exceeded
+
+When the rate limit is exceeded, the API returns:
+
+**Status**: `429 Too Many Requests`
+
+**Headers**:
+```
+Retry-After: 42
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1234567890
+```
+
+**Body**:
+```json
+{
+  "error": "ratelimit_exceeded",
+  "detail": "Rate limit exceeded: 100 per 1 minute"
+}
+```
+
+### Exemptions
+
+The `/health` endpoint is exempt from rate limiting to ensure monitoring systems can always check service status.
+
+### Production Considerations
+
+For production deployments behind a reverse proxy (nginx, Cloudflare, etc.):
+
+1. Ensure the proxy forwards the real client IP via `X-Forwarded-For` or `X-Real-IP` headers
+2. Consider implementing additional rate limiting at the infrastructure layer for defense in depth
+3. Adjust the rate limit based on your expected traffic patterns and resource capacity
+
+---
+
 ## Configuration
 
 Copy `.env.example` to `.env` and adjust values:
@@ -285,5 +348,6 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectu
 - **Click-count consistency** — `links.click_count` is the authoritative counter (atomically incremented via `UPDATE … SET click_count = click_count + 1`); the `clicks` table is used exclusively for detailed analytics. A discrepancy caused by a failed insert is acceptable and self-documents in logs.
 - **Soft-delete and analytics** — clicks are tied to `link_id` (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
-- **Rate limiting** — no rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.
+- **Rate limiting** — IP-based rate limiting (100 requests/minute) is implemented using SlowAPI. The redirect endpoint benefits from this protection while maintaining sub-10 ms resolution. For production deployments, infrastructure-level rate limiting (e.g., a reverse proxy) provides additional defense in depth.
+
 
