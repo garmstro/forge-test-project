@@ -22,6 +22,22 @@ class Settings(BaseSettings):
     # Application version
     VERSION: str = "0.1.0"
 
+    # ---------------------------------------------------------------------------
+    # Rate limiting
+    # ---------------------------------------------------------------------------
+    # Limits follow the slowapi / limits library format: "N/period"
+    # where period is one of: second, minute, hour, day.
+    # Set to an empty string to disable a particular tier.
+
+    # Applied to all authenticated API endpoints (links, analytics, users/token).
+    # Keyed by authenticated user ID when a Bearer token is present, otherwise IP.
+    RATE_LIMIT_API: str = "200/minute"
+
+    # Applied to the public redirect endpoint (GET /{slug}).
+    # Keyed by IP address only (no auth on that path).
+    # Set deliberately high to avoid impacting the hot path in normal use.
+    RATE_LIMIT_REDIRECT: str = "300/minute"
+
     def validate_required(self) -> None:
         """Call on startup to fail loudly if critical settings are missing."""
         if not self.SECRET_KEY:
