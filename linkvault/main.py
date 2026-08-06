@@ -5,15 +5,24 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from linkvault.api.analytics import router as analytics_router
 from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
+from linkvault.api.rate_limit import rate_limit_by_ip
 from linkvault.config import settings
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limiting middleware that applies per-IP limits to all requests."""
+    
+    async def dispatch(self, request: Request, call_next):
+        return await rate_limit_by_ip(request, call_next)
 
 
 def create_app() -> FastAPI:
@@ -22,6 +31,11 @@ def create_app() -> FastAPI:
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
     )
+
+    # ------------------------------------------------------------------
+    # Rate limiting middleware
+    # ------------------------------------------------------------------
+    application.add_middleware(RateLimitMiddleware)
 
     # ------------------------------------------------------------------
     # Custom error envelope: {"error": "...", "detail": "..."}
