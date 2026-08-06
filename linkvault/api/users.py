@@ -4,10 +4,12 @@ import hashlib
 import uuid
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from linkvault.api.deps import check_rate_limit_by_ip
+from linkvault.config import settings
 from linkvault.database import get_db
 from linkvault.models.user import User
 from linkvault.schemas.user import (
@@ -39,9 +41,17 @@ def _hash_api_key(raw_key: str) -> str:
 )
 async def register(
     payload: UserRegister,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> UserRegisterResponse:
     """Register a new user.  Returns a one-time plaintext API key."""
+    # Rate limit: 5 requests per hour per IP
+    await check_rate_limit_by_ip(
+        request,
+        max_requests=settings.RATE_LIMIT_REGISTER_PER_HOUR,
+        window_seconds=3600,
+    )
+
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(
@@ -70,6 +80,7 @@ async def register(
 @router.post("/token", response_model=TokenResponse)
 async def get_token(
     payload: UserLogin,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """Exchange email + password for the plaintext API key.
@@ -77,6 +88,13 @@ async def get_token(
     Decision (see DECISIONS.md §6): a new API key is generated and persisted on
     every call, invalidating the previous one.
     """
+    # Rate limit: 10 requests per minute per IP
+    await check_rate_limit_by_ip(
+        request,
+        max_requests=settings.RATE_LIMIT_TOKEN_PER_MINUTE,
+        window_seconds=60,
+    )
+
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
 
