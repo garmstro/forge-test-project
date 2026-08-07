@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from linkvault.database import Base, get_db
 from linkvault.main import app
+from linkvault.ratelimit import limiter
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -58,7 +59,13 @@ async def client(db_session: AsyncSession, db_engine):
 
     Each dependency invocation opens a new session so that writes from
     one request are committed and visible to the next.
+
+    The rate limiter's in-memory storage is reset before each test so
+    that tests don't bleed request counts into one another.
     """
+    # Reset rate-limiter counters so each test starts with a clean slate.
+    limiter._storage.reset()
+
     factory = async_sessionmaker(
         bind=db_engine,
         class_=AsyncSession,
