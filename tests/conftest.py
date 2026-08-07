@@ -6,14 +6,23 @@ are fully isolated with no shared state.
 """
 from __future__ import annotations
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from linkvault.database import Base, get_db
 from linkvault.main import app
+from linkvault.ratelimit import limiter
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter() -> None:
+    """Reset the shared rate-limiter state before every test so that tests
+    are fully isolated and cannot exhaust each other's buckets."""
+    limiter.reset()
 
 
 @pytest_asyncio.fixture()

@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     # Application version
     VERSION: str = "0.1.0"
 
+    # ---------------------------------------------------------------------------
+    # Rate limiting — expressed as "<count>/<period>" where period is one of
+    # second | minute | hour | day.  Set to "0/minute" to disable a tier.
+    # ---------------------------------------------------------------------------
+    RATE_LIMIT_AUTH: str = "10/minute"      # POST /users/register, /users/token
+    RATE_LIMIT_WRITE: str = "60/minute"     # POST|PATCH|DELETE /links*
+    RATE_LIMIT_READ: str = "300/minute"     # GET /links*, GET /analytics*
+    RATE_LIMIT_REDIRECT: str = "600/minute" # GET /{slug}
+
     def validate_required(self) -> None:
         """Call on startup to fail loudly if critical settings are missing."""
         if not self.SECRET_KEY:
