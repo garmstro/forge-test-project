@@ -6,14 +6,45 @@ are fully isolated with no shared state.
 """
 from __future__ import annotations
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from linkvault.database import Base, get_db
 from linkvault.main import app
+from linkvault.ratelimit import limiter
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def disable_rate_limiting():
+    """
+    Disable rate limiting by default for all tests.
+    
+    This fixture runs automatically for every test to ensure rate limits
+    don't interfere with normal test execution.
+    """
+    original_enabled = limiter.enabled
+    limiter.enabled = False
+    yield
+    limiter.enabled = original_enabled
+
+
+@pytest.fixture
+def enable_rate_limiting():
+    """
+    Re-enable rate limiting for tests that need to verify rate limit behavior.
+    
+    Use this fixture explicitly in tests that need to test rate limiting.
+    Also resets the limiter storage between tests.
+    """
+    limiter.enabled = True
+    # Reset the in-memory storage to clear any previous rate limit state
+    limiter.reset()
+    yield limiter
+    limiter.enabled = False
 
 
 @pytest_asyncio.fixture()
