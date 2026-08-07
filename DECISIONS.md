@@ -41,9 +41,27 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 ## 5. Rate Limiting
 
-**Decision:** **No application-level rate limiting** is implemented in this phase.
+**Decision:** **Application-level rate limiting** is implemented using `slowapi` with configurable per-endpoint limits.
 
-**Rationale:** The redirect endpoint is designed for sub-10 ms resolution via a single indexed DB lookup. Infrastructure-level rate limiting (e.g., nginx `limit_req`, Caddy rate-limit middleware, or a cloud WAF) is the recommended approach for production deployments and avoids adding latency or complexity to the hot path. This decision is revisable in a future phase.
+**Implementation:**
+- **Auth endpoints** (`/users/register`, `/users/token`): 10 requests/minute per IP address
+- **Link management** (`/links/*`): 60 requests/minute per authenticated user
+- **Analytics** (`/analytics/*`): 30 requests/minute per authenticated user
+- **Redirects** (`/{slug}`): 120 requests/minute per IP address
+
+**Key design choices:**
+- Public endpoints (auth, redirects) are rate-limited by IP address
+- Authenticated endpoints are rate-limited by API key (per-user limits)
+- The redirect endpoint has the highest limit to minimize impact on the hot path
+- Rate limiting can be disabled entirely via `RATE_LIMIT_ENABLED=false` in `.env`
+- All limits are configurable via environment variables
+
+**Rationale:** While infrastructure-level rate limiting (nginx, Cloudflare, etc.) remains the recommended approach for production deployments, application-level rate limiting provides a baseline defense against abuse and ensures consistent behavior across deployment environments. The `slowapi` library adds minimal overhead and integrates cleanly with FastAPI.
+
+**Trade-offs:**
+- Adds a small amount of latency to each request (in-memory storage lookup)
+- In-memory storage means limits reset on application restart
+- For multi-worker deployments, consider using Redis storage for shared state
 
 ---
 
