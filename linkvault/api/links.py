@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.api.deps import get_current_user
+from linkvault.config import settings
 from linkvault.database import get_db
 from linkvault.models.link import Link
 from linkvault.models.user import User
+from linkvault.ratelimit import limiter
 from linkvault.schemas.link import (
     LinkCreate,
     LinkResponse,
@@ -55,7 +57,9 @@ async def _resolve_active_link(slug: str, user: User, db: AsyncSession) -> Link:
 
 
 @router.post("", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_LINKS)
 async def create_link(
+    request: Request,
     payload: LinkCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -122,7 +126,9 @@ async def create_link(
 
 
 @router.get("", response_model=PaginatedLinksResponse)
+@limiter.limit(settings.RATE_LIMIT_LINKS)
 async def list_links(
+    request: Request,
     page: int = 1,
     page_size: int = 20,
     current_user: User = Depends(get_current_user),
@@ -166,7 +172,9 @@ async def list_links(
 
 
 @router.get("/{slug}", response_model=LinkResponse)
+@limiter.limit(settings.RATE_LIMIT_LINKS)
 async def get_link(
+    request: Request,
     slug: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -182,7 +190,9 @@ async def get_link(
 
 
 @router.patch("/{slug}", response_model=LinkResponse)
+@limiter.limit(settings.RATE_LIMIT_LINKS)
 async def update_link(
+    request: Request,
     slug: str,
     payload: LinkUpdate,
     current_user: User = Depends(get_current_user),
@@ -213,7 +223,9 @@ async def update_link(
 
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(settings.RATE_LIMIT_LINKS)
 async def delete_link(
+    request: Request,
     slug: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
