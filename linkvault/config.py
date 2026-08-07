@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     # Application version
     VERSION: str = "0.1.0"
 
+    # Rate limiting (requests per minute)
+    # Set to 0 to disable rate limiting for that category
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH: str = "10/minute"  # Public auth endpoints (register, token)
+    RATE_LIMIT_LINKS: str = "60/minute"  # Authenticated link management endpoints
+    RATE_LIMIT_ANALYTICS: str = "30/minute"  # Analytics endpoints
+    RATE_LIMIT_REDIRECTS: str = "120/minute"  # Public redirect endpoint (hot path)
+
     def validate_required(self) -> None:
         """Call on startup to fail loudly if critical settings are missing."""
         if not self.SECRET_KEY:
