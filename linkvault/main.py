@@ -11,6 +11,7 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.ratelimit import RateLimitMiddleware
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -21,6 +22,17 @@ def create_app() -> FastAPI:
         title="LinkVault",
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
+    )
+
+    # ------------------------------------------------------------------
+    # Middleware
+    # ------------------------------------------------------------------
+    application.add_middleware(
+        RateLimitMiddleware,
+        auth_limit=settings.RATE_LIMIT_AUTH,
+        write_limit=settings.RATE_LIMIT_WRITE,
+        read_limit=settings.RATE_LIMIT_READ,
+        redirect_limit=settings.RATE_LIMIT_REDIRECT,
     )
 
     # ------------------------------------------------------------------
@@ -52,10 +64,10 @@ def create_app() -> FastAPI:
     application.include_router(users_router)
     application.include_router(links_router)
     application.include_router(analytics_router)
-    application.include_router(redirects_router)  # must be last (catches /{slug})
 
     # ------------------------------------------------------------------
-    # Health endpoint
+    # Health endpoint — must be registered BEFORE the redirects router
+    # because /{slug} would otherwise swallow GET /health.
     # ------------------------------------------------------------------
     @application.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
@@ -65,6 +77,8 @@ def create_app() -> FastAPI:
             "scheduler": "not_started",
             "version": settings.VERSION,
         }
+
+    application.include_router(redirects_router)  # must be last (catches /{slug})
 
     return application
 
