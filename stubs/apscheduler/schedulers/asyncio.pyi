@@ -1,0 +1,3 @@
+from apscheduler.schedulers.base import BaseScheduler
+
+class AsyncIOScheduler(BaseScheduler): ...

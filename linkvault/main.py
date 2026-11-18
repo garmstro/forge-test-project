@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -11,9 +13,20 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.services.cleanup import shutdown_scheduler, start_scheduler
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Start the background scheduler on server start; stop it on shutdown."""
+    start_scheduler()
+    try:
+        yield
+    finally:
+        await shutdown_scheduler()
 
 
 def create_app() -> FastAPI:
@@ -21,6 +34,7 @@ def create_app() -> FastAPI:
         title="LinkVault",
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
+        lifespan=lifespan,
     )
 
     # ------------------------------------------------------------------
@@ -70,4 +84,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
