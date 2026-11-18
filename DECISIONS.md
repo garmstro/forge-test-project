@@ -53,3 +53,15 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
 
+
+---
+
+## 7. Background Cleanup Job Behaviour
+
+**Decision:** The cleanup job (`linkvault/services/cleanup.py`) runs on an APScheduler `AsyncIOScheduler` inside the API process. Its job store is a SQLite database (`SCHEDULER_DB_URL`), and the job is saved under a fixed ID and a textual function reference (`linkvault.services.cleanup:run_cleanup_job`).
+
+- **Restart:** the job is added only if it isn't already stored, so a restart keeps the stored `next_run_time` instead of resetting the 15-minute clock.
+- **Missed runs:** `coalesce=True` and `misfire_grace_time=None`. Runs missed while the app was down become one catch-up run at startup. `max_instances=1` stops two runs from overlapping.
+- **Query:** one bulk `UPDATE ... WHERE expires_at < now AND deleted_at IS NULL`. `now` is naive UTC, matching §4.
+- **After cleanup:** an expired link that has been cleaned up is soft-deleted, so `GET /{slug}` returns `404` instead of `410`, and its slug can be reused. Before cleanup runs, the redirect engine still returns `410`.
+- **Opt-out:** `SCHEDULER_ENABLED=false` turns the scheduler off. This is for running several API workers, where only one process should own the job.

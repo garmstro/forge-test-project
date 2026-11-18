@@ -18,6 +18,8 @@ class Settings(BaseSettings):
 
     # APScheduler persistent job store
     SCHEDULER_DB_URL: str = "sqlite:///./scheduler.db"
+    # Set to false to run the API without the background cleanup job
+    SCHEDULER_ENABLED: bool = True
 
     # Application version
     VERSION: str = "0.1.0"
