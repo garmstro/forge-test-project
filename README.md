@@ -2,7 +2,7 @@
 
 > A production-grade URL shortening and analytics platform — built with FastAPI, SQLAlchemy (async), APScheduler, and a full-featured terminal CLI.
 
-Updated by Forge — 18 November 2026
+Updated by Forge — 18 November 2026, 17:02 UTC
 
 ---
 
