@@ -27,7 +27,7 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Decision:** Clicks are associated with `link_id` (UUID), **not** with the slug string. When a link is soft-deleted and a new link later claims the same slug, it receives a different UUID. Historical click data for the old UUID is therefore never mixed with data for the new link.
 
-**Consequence:** After a soft-delete, `GET /analytics/{slug}` will return 404 (no active link with that slug). If the slug is reclaimed, analytics start fresh. This is the safest default and avoids any possibility of data leakage between owners.
+**Consequence:** After a soft-delete, `GET /analytics/{slug}` will return 404 (no active link with that slug). If the slug is reclaimed, analytics start fresh. This is the safest default and avoids any possibility of data leakage between owners. This applies equally to links soft-deleted by the expired-link cleanup job (see §7).
 
 ---
 
@@ -53,3 +53,21 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
 
+---
+
+## 7. Expired Links Become Deleted
+
+**Decision:** Every 15 minutes the cleanup job (`linkvault/services/cleanup.py`) soft-deletes every link whose `expires_at` is in the past and whose `deleted_at` is still `NULL`, setting `deleted_at` to the time of the run (UTC). Links that were already deleted keep their original `deleted_at`. Links with no expiry are never touched.
+
+**Consequences:** Once the job has run, an expired link is indistinguishable from one the owner deleted:
+- Visitors get `404 {"error": "not_found"}` instead of `410 {"error": "link_expired"}`. The `410` response is only seen in the window (up to ~15 minutes) between expiry and the next cleanup run.
+- The slug becomes reusable for a new link.
+- Analytics for the link are no longer available (`GET /analytics/{slug}` returns 404), and it disappears from `GET /links` — see §3.
+
+Links that hit their `max_clicks` cap are **not** affected; they keep returning `410` until the owner raises the cap or deletes the link.
+
+**Scheduling details:**
+- The job is stored in a persistent APScheduler job store at `SCHEDULER_DB_URL`, under the fixed id `expired_link_cleanup`. On start-up an existing matching job is kept as-is, so restarts neither duplicate the job nor push back its next run.
+- `coalesce=True` and `max_instances=1`: after downtime the job catches up with a single run, and runs never overlap.
+- Every run logs one structured line `{"event": "cleanup", "links_expired": N, "timestamp": "..."}`, including when `N` is 0. A failed run logs `{"event": "cleanup_failed", ...}` with the traceback and the scheduler carries on to the next run.
+- The scheduler is started and stopped by the FastAPI lifespan. Test clients use httpx's ASGI transport, which does not run lifespan events, so the scheduler never starts during normal test runs.
