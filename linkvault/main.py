@@ -11,9 +11,14 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.database import AsyncSessionLocal
+from linkvault.services.scheduler import SchedulerManager
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
+
+# Global scheduler manager instance
+scheduler_manager: SchedulerManager | None = None
 
 
 def create_app() -> FastAPI:
@@ -22,6 +27,43 @@ def create_app() -> FastAPI:
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
     )
+
+    # ------------------------------------------------------------------
+    # Startup event: validate settings and start scheduler
+    # ------------------------------------------------------------------
+    @application.on_event("startup")
+    async def startup_event() -> None:
+        """Validate required settings and start the scheduler."""
+        global scheduler_manager
+        
+        try:
+            # Validate required settings first
+            settings.validate_required()
+            
+            # Initialize and start the scheduler
+            scheduler_manager = SchedulerManager(
+                db_factory=AsyncSessionLocal,
+                scheduler_db_url=settings.SCHEDULER_DB_URL,
+                logger_instance=logger,
+            )
+            scheduler_manager.start()
+            logger.info("Scheduler started")
+            
+        except Exception as e:
+            logger.error(f"Error during startup: {e}", exc_info=True)
+            # Don't crash the app if scheduler fails to start
+
+    # ------------------------------------------------------------------
+    # Shutdown event: stop scheduler gracefully
+    # ------------------------------------------------------------------
+    @application.on_event("shutdown")
+    async def shutdown_event() -> None:
+        """Stop the scheduler gracefully."""
+        global scheduler_manager
+        
+        if scheduler_manager:
+            scheduler_manager.stop()
+            logger.info("Scheduler stopped")
 
     # ------------------------------------------------------------------
     # Custom error envelope: {"error": "...", "detail": "..."}
@@ -59,10 +101,11 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     @application.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
+        scheduler_status = "running" if (scheduler_manager and scheduler_manager.is_running()) else "not_started"
         return {
             "status": "ok",
             "db": "ok",
-            "scheduler": "not_started",
+            "scheduler": scheduler_status,
             "version": settings.VERSION,
         }
 
