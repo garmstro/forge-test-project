@@ -15,6 +15,7 @@ Updated by Forge — 18 November 2026, 17:02 UTC
 - [Running the Server](#running-the-server)
 - [Running the CLI](#running-the-cli)
 - [Running the Tests](#running-the-tests)
+- [Background Cleanup Job](#background-cleanup-job)
 - [Full Lifecycle Example (curl)](#full-lifecycle-example-curl)
 - [API Reference](#api-reference)
 - [Configuration](#configuration)
@@ -37,7 +38,7 @@ Everything runs **locally with zero paid dependencies** — no external services
 - **Redirect engine** — single-query slug resolution with atomic click-count increments; `301` for permanent links, `302` for capped/expiring ones, `410` when a link is exhausted.
 - **Click analytics** — per-link breakdown by day, unique IPs, top referers, and top user-agents; user-level summary across all links.
 - **Authentication** — email + password registration; API key (UUID4) issued on registration and exchangeable via `/users/token`; all protected routes use `Authorization: Bearer <api_key>`.
-- **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) expires links every 15 minutes and emits structured JSON log lines.
+- **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) expires links every 15 minutes and emits structured JSON log lines. See [Background Cleanup Job](#background-cleanup-job).
 - **Terminal CLI** — `linkvault` command for every API operation, with Rich tables, bold-green short URLs, and a bar-chart view of daily click data.
 - **Health endpoint** — `/health` reports DB and scheduler status; returns `503` when the database is unreachable.
 
@@ -123,6 +124,28 @@ To also check types:
 ```bash
 mypy linkvault/
 ```
+
+---
+
+## Background Cleanup Job
+
+When the server starts, it also starts an APScheduler `AsyncIOScheduler`, and it shuts the scheduler down cleanly when the server stops. The scheduler runs the **expired link cleanup** job every **15 minutes**:
+
+- Every link whose `expires_at` is in the past (compared in UTC) and whose `deleted_at` is empty gets **soft-deleted**: `deleted_at` is set to the current time. This is the same soft-delete that `DELETE /links/{slug}` does, so the slug can be reused right away. Visitors to a cleaned-up slug get `404 not_found` instead of `410 link_expired`.
+- Click history is kept. Clicks belong to the link's UUID, so a new link that reuses the slug starts with fresh analytics.
+- Links with no expiry date and links that are already deleted are never touched.
+- **Links capped by `max_clicks` are not removed by this job.** They keep returning `410 Gone` until the owner deletes them or raises the cap.
+- Each run writes a structured log line, even when nothing expired:
+
+  ```json
+  {"event": "cleanup", "links_expired": 3, "timestamp": "2026-11-18T17:15:00+00:00"}
+  ```
+
+- A failed run is logged as `{"event": "cleanup_failed", ...}`. It doesn't crash the app, and the next run goes ahead as normal.
+
+The schedule is stored in a separate SQLite job store at `SCHEDULER_DB_URL` (default `sqlite:///./scheduler.db`), so it survives restarts. On startup the job is registered under a fixed id (`expired_link_cleanup`). If a matching job already exists it is kept, so restarts never create duplicates. If the server was down through several scheduled runs, they are combined into one catch-up run.
+
+`GET /health` reports `"scheduler": "running"` while the scheduler is active, and `"not_started"` otherwise.
 
 ---
 
@@ -266,7 +289,7 @@ linkvault/
 │   ├── services/
 │   │   ├── shortener.py     # Slug generation (Base58, collision-safe)
 │   │   ├── analytics.py     # Click aggregation logic
-│   │   └── cleanup.py       # Expired link purge job
+│   │   └── cleanup.py       # Expired link cleanup job + scheduler setup
 │   └── cli/
 │       └── app.py           # Typer CLI app
 └── tests/
@@ -274,7 +297,8 @@ linkvault/
     ├── test_links.py
     ├── test_redirects.py
     ├── test_analytics.py
-    └── test_auth.py
+    ├── test_auth.py
+    └── test_cleanup.py
 ```
 
 ---
@@ -288,4 +312,4 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectu
 - **Soft-delete and analytics** — clicks are tied to `link_id` (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
 - **Rate limiting** — no rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.
-
+- **Expired link cleanup** — a 15-minute job soft-deletes links whose `expires_at` has passed (UTC). Click-capped links are left alone. The schedule persists in `SCHEDULER_DB_URL` and is registered idempotently, so it is never duplicated.

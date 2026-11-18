@@ -53,3 +53,16 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
 
+---
+
+## 7. Expired Link Cleanup Job
+
+**Decision:** Every 15 minutes, an APScheduler job (`linkvault/services/cleanup.py`) soft-deletes every link where `expires_at < now` and `deleted_at IS NULL`. It does this with a single `UPDATE … WHERE … RETURNING` statement and sets `deleted_at = now`. "Now" is naive UTC, to match how datetimes are stored (§4). Each run logs `{"event": "cleanup", "links_expired": N, "timestamp": "..."}`, including when N is 0.
+
+**Details:**
+- **Same soft-delete as `DELETE /links/{slug}`.** The slug becomes reusable right away, and click history stays attached to the old link's UUID (§3). After cleanup, the short URL returns `404 not_found` instead of `410 link_expired`.
+- **Click-capped links are not removed.** The spec only defines cleanup in terms of `expires_at`. A link that has hit `max_clicks` keeps returning `410 Gone`, so its owner can still raise the cap with `PATCH`. Removing those links automatically would silently free up slugs that their owners may still want to keep.
+- **Persistence and no duplicates.** Jobs are stored in a SQLAlchemy job store at `SCHEDULER_DB_URL`, which is a separate database from the app data. On startup the job is registered under the fixed id `expired_link_cleanup`. If a stored job with the same function and interval already exists, it is kept along with its `next_run_time`, so frequent restarts don't keep pushing the next run back. An outdated definition is replaced under the same id rather than added a second time.
+- **Missed runs.** `coalesce=True` with no misfire grace limit means that downtime leads to a single catch-up run, not one run per missed slot. `max_instances=1` stops runs from overlapping.
+- **Failure handling.** The job wrapper catches any exception, rolls back the transaction, and logs a `cleanup_failed` event. The scheduler and the app keep running, and the next run happens on schedule.
+- **Lifecycle.** The scheduler is started in the FastAPI lifespan handler and is stopped there on shutdown. Shutdown waits until the scheduler has actually stopped. `/health` reports `"scheduler": "running"` only while it is active.
