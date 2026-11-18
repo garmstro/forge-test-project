@@ -53,3 +53,28 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
 
+---
+
+## 7. Expired Links Return 404 (not 410) After Cleanup
+
+**Decision:** The cleanup job implements the spec literally: it sets `deleted_at = now` on expired links. The redirect engine treats every soft-deleted link as non-existent, so an expired link returns **`410 link_expired` until the next cleanup run (≤ 15 minutes), then `404 not_found`**.
+
+**Rationale:**
+- Expiry and manual deletion share the same soft-delete column, so after cleanup the redirect path cannot tell the two apart without a schema change (e.g., a `deleted_reason` column) or an extra query on the hot path.
+- Once cleaned up, the slug is free to be reused, exactly like a manually deleted one. Continuing to return `410` for a slug that may now belong to nobody (or soon to someone else) would be misleading.
+- The `410` window is short and bounded by the job interval. Clients should treat both `404` and `410` as "this short link no longer works".
+
+This is revisable: adding a `deleted_reason` column would let the redirect engine keep returning `410` for expired links after cleanup.
+
+---
+
+## 8. How the Scheduler Reports Its Status
+
+**Decision:** `/health` reports `"scheduler": "running"` **only** when the APScheduler instance's state is `STATE_RUNNING`. Every other case maps to `"scheduler": "stopped"` and makes the endpoint return **`503`** with `"status": "error"`:
+- the scheduler was never started (e.g., `SCHEDULER_ENABLED=false`, or startup failed),
+- it has been shut down,
+- it is paused (APScheduler's own `running` property counts paused as running; we don't, because a paused scheduler runs no jobs).
+
+**Rationale:** The cleanup job has no other liveness signal. If a stalled scheduler were reported as healthy, expired links would quietly pile up. Treating "not running" as unhealthy lets standard uptime monitors catch it. The scheduler instance lives on `app.state.scheduler` and is created, started and shut down by the FastAPI lifespan in `linkvault/main.py`. Startup also calls `settings.validate_required()` first, so the app refuses to start without a `SECRET_KEY`.
+
+The `"status"` field is `"ok"` only when both checks pass. Any failing component yields `"error"`, and the individual `db`/`scheduler` fields show which one failed.

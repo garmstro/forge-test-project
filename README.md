@@ -13,6 +13,8 @@ Updated by Forge — 18 November 2026, 17:02 UTC
 - [Tech Stack](#tech-stack)
 - [Quick Start](#quick-start)
 - [Running the Server](#running-the-server)
+- [Health Check](#health-check)
+- [Background Cleanup](#background-cleanup)
 - [Running the CLI](#running-the-cli)
 - [Running the Tests](#running-the-tests)
 - [Full Lifecycle Example (curl)](#full-lifecycle-example-curl)
@@ -37,9 +39,9 @@ Everything runs **locally with zero paid dependencies** — no external services
 - **Redirect engine** — single-query slug resolution with atomic click-count increments; `301` for permanent links, `302` for capped/expiring ones, `410` when a link is exhausted.
 - **Click analytics** — per-link breakdown by day, unique IPs, top referers, and top user-agents; user-level summary across all links.
 - **Authentication** — email + password registration; API key (UUID4) issued on registration and exchangeable via `/users/token`; all protected routes use `Authorization: Bearer <api_key>`.
-- **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) expires links every 15 minutes and emits structured JSON log lines.
+- **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) soft-deletes expired links every 15 minutes and emits one structured JSON log line per run. See [Background Cleanup](#background-cleanup).
 - **Terminal CLI** — `linkvault` command for every API operation, with Rich tables, bold-green short URLs, and a bar-chart view of daily click data.
-- **Health endpoint** — `/health` reports DB and scheduler status; returns `503` when the database is unreachable.
+- **Health endpoint** — `/health` runs a real DB query and checks the cleanup scheduler; returns `503` if the database is unreachable or the scheduler is not running. See [Health Check](#health-check).
 
 ---
 
@@ -51,7 +53,7 @@ Everything runs **locally with zero paid dependencies** — no external services
 | Web Framework | FastAPI |
 | Database | SQLite via SQLAlchemy 2.x (async) |
 | Migrations | Alembic |
-| Background Jobs | APScheduler |
+| Background Jobs | APScheduler 3.x |
 | CLI | Typer + Rich |
 | Testing | pytest + pytest-asyncio + httpx |
 | Config | Pydantic Settings (`.env`) |
@@ -86,6 +88,52 @@ The API is now available at `http://localhost:8000`.
 Interactive docs: `http://localhost:8000/docs`  
 Health check: `http://localhost:8000/health`
 
+On startup the server:
+
+1. Validates required settings — it **refuses to start** with `RuntimeError: SECRET_KEY is not set...` if `SECRET_KEY` is empty.
+2. Starts the cleanup scheduler and registers the 15-minute cleanup job.
+
+On shutdown the scheduler is stopped cleanly.
+
+---
+
+## Health Check
+
+`GET /health` (public) runs `SELECT 1` against the database and checks that the cleanup scheduler is running.
+
+Healthy — `200 OK`:
+
+```json
+{"status": "ok", "db": "ok", "scheduler": "running", "version": "0.1.0"}
+```
+
+Unhealthy — `503 Service Unavailable`, with `"status": "error"` and the failing component flagged:
+
+| Condition | Response body |
+|---|---|
+| Database unreachable | `{"status": "error", "db": "error", "scheduler": "running", ...}` |
+| Scheduler not running (never started, shut down, or paused) | `{"status": "error", "db": "ok", "scheduler": "stopped", ...}` |
+
+Because `/health` is the only liveness signal for the background job, a stalled scheduler is reported as unhealthy rather than silently ignored.
+
+---
+
+## Background Cleanup
+
+Every **15 minutes** the cleanup job (`linkvault/services/cleanup.py`):
+
+1. Finds links where `expires_at < now` **and** `deleted_at IS NULL`.
+2. Soft-deletes them by setting `deleted_at = now` (single `UPDATE`; already-deleted links keep their original `deleted_at`).
+3. Logs exactly one structured line, even when nothing expired:
+
+   ```json
+   {"event": "cleanup", "links_expired": 3, "timestamp": "2026-11-18T17:15:00.123456Z"}
+   ```
+
+The schedule is stored in a SQLite job store at `SCHEDULER_DB_URL` (default `sqlite:///./scheduler.db`), so it survives restarts. The job uses a fixed ID with `replace_existing=True`, so restarting the server never creates a duplicate job.
+
+After cleanup, an expired link's slug returns **`404 not_found`** instead of `410 link_expired` (see [`DECISIONS.md`](DECISIONS.md) §7).
+
 ---
 
 ## Running the CLI
@@ -116,7 +164,7 @@ The CLI reads `LINKVAULT_API_URL` from the environment (default: `http://localho
 pytest -v
 ```
 
-The test suite uses an in-memory SQLite database — no running server required. Each test gets a fresh database via a session-scoped fixture.
+The test suite uses an in-memory SQLite database — no running server required. Each test gets a fresh database via a session-scoped fixture. `tests/conftest.py` sets `SCHEDULER_ENABLED=false` so the real background scheduler never starts during tests; scheduler tests opt in explicitly with a temporary job store.
 
 To also check types:
 
@@ -197,7 +245,7 @@ curl -s "$BASE/health"
 |--------|------|------|-------------|
 | `POST` | `/users/register` | ✗ | Register a new user; returns plaintext API key |
 | `POST` | `/users/token` | ✗ | Exchange email + password for the API key |
-| `GET` | `/health` | ✗ | Service health (DB + scheduler status) |
+| `GET` | `/health` | ✗ | Service health (real DB + scheduler check); `503` if either is down |
 | `GET` | `/{slug}` | ✗ | Redirect to destination URL; records click event |
 | `POST` | `/links` | ✓ | Create a new short link |
 | `GET` | `/links` | ✓ | Paginated list of the authenticated user's links |
@@ -230,7 +278,9 @@ LOG_LEVEL=INFO
 SCHEDULER_DB_URL=sqlite:///./scheduler.db
 ```
 
-All settings are validated at startup via `pydantic-settings`. The application will **fail loudly** if required settings are missing or malformed.
+All settings are validated at startup via `pydantic-settings`. The application will **fail loudly** if required settings are missing or malformed — in particular, startup aborts if `SECRET_KEY` is empty.
+
+Optional: `SCHEDULER_ENABLED` (default `true`). Set it to `false` to skip starting the cleanup scheduler (used by the test suite). With the scheduler disabled, `/health` reports `"scheduler": "stopped"` and returns `503`.
 
 ---
 
@@ -246,7 +296,7 @@ linkvault/
 ├── alembic/
 │   └── versions/
 ├── linkvault/
-│   ├── main.py              # FastAPI app factory
+│   ├── main.py              # FastAPI app factory + lifespan (settings check, scheduler start/stop)
 │   ├── config.py            # Pydantic Settings
 │   ├── database.py          # Async SQLAlchemy engine + session
 │   ├── models/
@@ -259,6 +309,7 @@ linkvault/
 │   │   └── user.py
 │   ├── api/
 │   │   ├── deps.py          # Shared dependencies (auth, DB session)
+│   │   ├── health.py        # /health router (registered before /{slug})
 │   │   ├── links.py         # /links router
 │   │   ├── redirects.py     # /{slug} redirect router
 │   │   ├── analytics.py     # /analytics router
@@ -266,7 +317,7 @@ linkvault/
 │   ├── services/
 │   │   ├── shortener.py     # Slug generation (Base58, collision-safe)
 │   │   ├── analytics.py     # Click aggregation logic
-│   │   └── cleanup.py       # Expired link purge job
+│   │   └── cleanup.py       # Expired link purge job + scheduler setup
 │   └── cli/
 │       └── app.py           # Typer CLI app
 └── tests/
@@ -274,7 +325,9 @@ linkvault/
     ├── test_links.py
     ├── test_redirects.py
     ├── test_analytics.py
-    └── test_auth.py
+    ├── test_auth.py
+    ├── test_cleanup.py
+    └── test_health.py
 ```
 
 ---
@@ -288,4 +341,5 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectu
 - **Soft-delete and analytics** — clicks are tied to `link_id` (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
 - **Rate limiting** — no rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.
-
+- **404 vs. 410 after cleanup** — once the cleanup job soft-deletes an expired link, its slug returns `404` rather than `410`.
+- **Scheduler health reporting** — `/health` reports `"running"` only when the scheduler is actively running; stopped, paused or never-started all map to `"stopped"` and a `503`.
