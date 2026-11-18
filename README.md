@@ -37,7 +37,7 @@ Everything runs **locally with zero paid dependencies** — no external services
 - **Redirect engine** — single-query slug resolution with atomic click-count increments; `301` for permanent links, `302` for capped/expiring ones, `410` when a link is exhausted.
 - **Click analytics** — per-link breakdown by day, unique IPs, top referers, and top user-agents; user-level summary across all links.
 - **Authentication** — email + password registration; API key (UUID4) issued on registration and exchangeable via `/users/token`; all protected routes use `Authorization: Bearer <api_key>`.
-- **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) expires links every 15 minutes and emits structured JSON log lines.
+- **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) runs every 15 minutes, soft-deletes links whose expiry time has passed, and emits a structured JSON log line (`{"event": "cleanup", "links_expired": N, "timestamp": "..."}`) on every run. Once cleaned up, an expired link behaves exactly like a deleted one: visitors get `404 not_found` instead of `410 link_expired`, the slug becomes reusable, and its analytics are no longer available.
 - **Terminal CLI** — `linkvault` command for every API operation, with Rich tables, bold-green short URLs, and a bar-chart view of daily click data.
 - **Health endpoint** — `/health` reports DB and scheduler status; returns `503` when the database is unreachable.
 
@@ -266,7 +266,7 @@ linkvault/
 │   ├── services/
 │   │   ├── shortener.py     # Slug generation (Base58, collision-safe)
 │   │   ├── analytics.py     # Click aggregation logic
-│   │   └── cleanup.py       # Expired link purge job
+│   │   └── cleanup.py       # Expired link cleanup job + scheduler
 │   └── cli/
 │       └── app.py           # Typer CLI app
 └── tests/
@@ -274,7 +274,8 @@ linkvault/
     ├── test_links.py
     ├── test_redirects.py
     ├── test_analytics.py
-    └── test_auth.py
+    ├── test_auth.py
+    └── test_cleanup.py
 ```
 
 ---
@@ -286,6 +287,6 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectu
 - **Slug collision strategy** — up to 5 retries with exponential back-off before returning a `409 Conflict`; probability of exhaustion at normal scale is negligible.
 - **Click-count consistency** — `links.click_count` is the authoritative counter (atomically incremented via `UPDATE … SET click_count = click_count + 1`); the `clicks` table is used exclusively for detailed analytics. A discrepancy caused by a failed insert is acceptable and self-documents in logs.
 - **Soft-delete and analytics** — clicks are tied to `link_id` (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.
+- **Expired links become deleted** — every 15 minutes the cleanup job sets `deleted_at` on links whose expiry has passed. After that run they return `404` (not `410`), their slug becomes reusable, and their analytics are no longer available. Links capped by `max_clicks` are not affected.
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
 - **Rate limiting** — no rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.
-
