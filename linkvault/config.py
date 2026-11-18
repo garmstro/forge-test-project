@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # APScheduler persistent job store
     SCHEDULER_DB_URL: str = "sqlite:///./scheduler.db"
 
+    # Start the background scheduler (expired-link cleanup) with the app.
+    # The test suite sets this to false so the real scheduler never runs.
+    SCHEDULER_ENABLED: bool = True
+
     # Application version
     VERSION: str = "0.1.0"
 
@@ -32,4 +36,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
