@@ -11,6 +11,11 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.services.cleanup import (
+    get_scheduler_status,
+    start_scheduler,
+    stop_scheduler,
+)
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -22,6 +27,29 @@ def create_app() -> FastAPI:
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
     )
+
+    # ------------------------------------------------------------------
+    # Lifecycle events: start/stop scheduler
+    # ------------------------------------------------------------------
+    @application.on_event("startup")
+    async def startup_event() -> None:
+        """Start the background scheduler on application startup."""
+        try:
+            start_scheduler()
+            logger.info("Application startup complete with scheduler running")
+        except Exception as e:
+            logger.exception("Failed to start scheduler: %s", e)
+            # Don't fail the entire application if scheduler fails to start
+            # This allows the API to still function
+
+    @application.on_event("shutdown")
+    async def shutdown_event() -> None:
+        """Stop the background scheduler on application shutdown."""
+        try:
+            stop_scheduler()
+            logger.info("Application shutdown complete")
+        except Exception as e:
+            logger.exception("Error during scheduler shutdown: %s", e)
 
     # ------------------------------------------------------------------
     # Custom error envelope: {"error": "...", "detail": "..."}
@@ -62,7 +90,7 @@ def create_app() -> FastAPI:
         return {
             "status": "ok",
             "db": "ok",
-            "scheduler": "not_started",
+            "scheduler": get_scheduler_status(),
             "version": settings.VERSION,
         }
 
