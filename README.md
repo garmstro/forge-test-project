@@ -25,7 +25,7 @@ Updated by Forge — 18 November 2026, 17:02 UTC
 
 ## Overview
 
-LinkVault is a self-hosted URL shortener with first-class analytics. It exposes a REST API for managing short links, tracks every click with anonymised metadata, and surfaces aggregated statistics through both the API and a Rich-powered terminal dashboard. A background scheduler automatically expires stale links every 15 minutes.
+LinkVault is a self-hosted URL shortener with first-class analytics. It exposes a REST API for managing short links, tracks every click with anonymised metadata, and surfaces aggregated statistics through both the API and a Rich-powered terminal dashboard. A background scheduler marks expired links as deleted every 15 minutes.
 
 Everything runs **locally with zero paid dependencies** — no external services, no cloud accounts required.
 
@@ -228,6 +228,7 @@ SECRET_KEY=changeme-use-a-real-secret
 BASE_URL=http://localhost:8000
 LOG_LEVEL=INFO
 SCHEDULER_DB_URL=sqlite:///./scheduler.db
+SCHEDULER_ENABLED=true
 ```
 
 All settings are validated at startup via `pydantic-settings`. The application will **fail loudly** if required settings are missing or malformed.
@@ -274,7 +275,8 @@ linkvault/
     ├── test_links.py
     ├── test_redirects.py
     ├── test_analytics.py
-    └── test_auth.py
+    ├── test_auth.py
+    └── test_cleanup.py
 ```
 
 ---

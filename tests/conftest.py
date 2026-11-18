@@ -6,12 +6,18 @@ are fully isolated with no shared state.
 """
 from __future__ import annotations
 
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import os
 
-from linkvault.database import Base, get_db
-from linkvault.main import app
+# Never start the real background scheduler from the test suite. This must be
+# set before ``linkvault`` is imported because settings are read at import time.
+os.environ["SCHEDULER_ENABLED"] = "false"
+
+import pytest_asyncio  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
+
+from linkvault.database import Base, get_db  # noqa: E402
+from linkvault.main import app  # noqa: E402
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -82,4 +88,3 @@ async def client(db_session: AsyncSession, db_engine):
     ) as ac:
         yield ac
     app.dependency_overrides.clear()
-
