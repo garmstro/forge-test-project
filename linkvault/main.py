@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -11,9 +14,25 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.services.cleanup import create_scheduler, ensure_cleanup_job, stop_scheduler
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    """Start the background scheduler on startup; stop it cleanly on shutdown."""
+    scheduler = create_scheduler(settings.SCHEDULER_DB_URL)
+    scheduler.start()
+    try:
+        ensure_cleanup_job(scheduler)
+        application.state.scheduler = scheduler
+        yield
+    finally:
+        application.state.scheduler = None
+        await stop_scheduler(scheduler)
+        logger.info("Scheduler stopped")
 
 
 def create_app() -> FastAPI:
@@ -21,7 +40,9 @@ def create_app() -> FastAPI:
         title="LinkVault",
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
+        lifespan=lifespan,
     )
+    application.state.scheduler = None
 
     # ------------------------------------------------------------------
     # Custom error envelope: {"error": "...", "detail": "..."}
@@ -47,6 +68,20 @@ def create_app() -> FastAPI:
         )
 
     # ------------------------------------------------------------------
+    # Health endpoint — registered before the /{slug} catch-all so that
+    # GET /health is not treated as a short-link lookup.
+    # ------------------------------------------------------------------
+    @application.get("/health", tags=["health"])
+    async def health(request: Request) -> dict[str, str]:
+        scheduler: AsyncIOScheduler | None = request.app.state.scheduler
+        return {
+            "status": "ok",
+            "db": "ok",
+            "scheduler": "running" if scheduler is not None and scheduler.running else "not_started",
+            "version": settings.VERSION,
+        }
+
+    # ------------------------------------------------------------------
     # Routers
     # ------------------------------------------------------------------
     application.include_router(users_router)
@@ -54,20 +89,7 @@ def create_app() -> FastAPI:
     application.include_router(analytics_router)
     application.include_router(redirects_router)  # must be last (catches /{slug})
 
-    # ------------------------------------------------------------------
-    # Health endpoint
-    # ------------------------------------------------------------------
-    @application.get("/health", tags=["health"])
-    async def health() -> dict[str, str]:
-        return {
-            "status": "ok",
-            "db": "ok",
-            "scheduler": "not_started",
-            "version": settings.VERSION,
-        }
-
     return application
 
 
 app = create_app()
-
