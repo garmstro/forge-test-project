@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 scheduler: AsyncIOScheduler | None = None
 
 
-async def expire_links_job() -> None:
+async def expire_links_job(session: AsyncSession | None = None) -> None:
     """
     Background job that soft-deletes expired links.
     
@@ -29,60 +29,70 @@ async def expire_links_job() -> None:
     - deleted_at IS NULL
     
     Sets deleted_at = now() on those links and logs a structured message.
+    
+    Args:
+        session: Optional AsyncSession for testing. If None, creates a new session.
     """
     now = datetime.now(timezone.utc)
     
-    async with AsyncSessionLocal() as session:
-        try:
-            # Find expired links that haven't been deleted yet
-            stmt = (
-                select(Link)
-                .where(Link.expires_at < now)
-                .where(Link.deleted_at.is_(None))
-            )
-            result = await session.execute(stmt)
-            expired_links = result.scalars().all()
-            
-            if not expired_links:
-                # No links to expire - log at debug level
-                logger.debug(
-                    json.dumps({
-                        "event": "cleanup",
-                        "links_expired": 0,
-                        "timestamp": now.isoformat(),
-                    })
-                )
-                return
-            
-            # Soft-delete all expired links
-            expired_ids = [link.id for link in expired_links]
-            update_stmt = (
-                update(Link)
-                .where(Link.id.in_(expired_ids))
-                .values(deleted_at=now)
-            )
-            await session.execute(update_stmt)
-            await session.commit()
-            
-            # Log structured event
-            logger.info(
+    # Use provided session or create a new one
+    should_close = session is None
+    if session is None:
+        session = AsyncSessionLocal()
+    
+    try:
+        # Find expired links that haven't been deleted yet
+        stmt = (
+            select(Link)
+            .where(Link.expires_at < now)
+            .where(Link.deleted_at.is_(None))
+        )
+        result = await session.execute(stmt)
+        expired_links = result.scalars().all()
+        
+        if not expired_links:
+            # No links to expire - log at debug level
+            logger.debug(
                 json.dumps({
                     "event": "cleanup",
-                    "links_expired": len(expired_ids),
+                    "links_expired": 0,
                     "timestamp": now.isoformat(),
                 })
             )
-            
-        except Exception as e:
-            await session.rollback()
-            logger.exception(
-                json.dumps({
-                    "event": "cleanup_error",
-                    "error": str(e),
-                    "timestamp": now.isoformat(),
-                })
-            )
-            raise
+            return
+        
+        # Soft-delete all expired links
+        expired_ids = [link.id for link in expired_links]
+        update_stmt = (
+            update(Link)
+            .where(Link.id.in_(expired_ids))
+            .values(deleted_at=now)
+        )
+        await session.execute(update_stmt)
+        await session.commit()
+        
+        # Log structured event
+        logger.info(
+            json.dumps({
+                "event": "cleanup",
+                "links_expired": len(expired_ids),
+                "timestamp": now.isoformat(),
+            })
+        )
+        
+    except Exception as e:
+        await session.rollback()
+        logger.exception(
+            json.dumps({
+                "event": "cleanup_error",
+                "error": str(e),
+                "timestamp": now.isoformat(),
+            })
+        )
+        raise
+    finally:
+        if should_close:
+            await session.close()
 
 
 def create_scheduler() -> AsyncIOScheduler:
