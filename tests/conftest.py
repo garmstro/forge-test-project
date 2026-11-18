@@ -6,12 +6,20 @@ are fully isolated with no shared state.
 """
 from __future__ import annotations
 
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import os
 
-from linkvault.database import Base, get_db
-from linkvault.main import app
+# Must run before linkvault is imported: settings are read at import time.
+# The real background scheduler must never start during automated tests
+# (tests that exercise the scheduler opt in explicitly via monkeypatch).
+os.environ["SCHEDULER_ENABLED"] = "false"
+os.environ.setdefault("SECRET_KEY", "test-secret-key")
+
+import pytest_asyncio  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
+
+from linkvault.database import Base, get_db  # noqa: E402
+from linkvault.main import app  # noqa: E402
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -52,6 +60,18 @@ async def db_session(db_engine):
 
 
 @pytest_asyncio.fixture()
+async def session_factory(db_engine):
+    """Session factory bound to the per-test engine (e.g. for service calls)."""
+    return async_sessionmaker(
+        bind=db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+        autocommit=False,
+    )
+
+
+@pytest_asyncio.fixture()
 async def client(db_session: AsyncSession, db_engine):
     """
     AsyncClient with the DB dependency overridden to use the test engine.
@@ -82,4 +102,3 @@ async def client(db_session: AsyncSession, db_engine):
     ) as ac:
         yield ac
     app.dependency_overrides.clear()
-
