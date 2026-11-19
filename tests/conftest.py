@@ -6,14 +6,26 @@ are fully isolated with no shared state.
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
+
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from linkvault.database import Base, get_db
 from linkvault.main import app
+from linkvault.services import ratelimit
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiters() -> Iterator[None]:
+    """Clear in-memory rate-limit state so no test inherits another's hits."""
+    ratelimit.reset_all()
+    yield
+    ratelimit.reset_all()
 
 
 @pytest_asyncio.fixture()
