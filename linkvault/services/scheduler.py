@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.config import settings
 from linkvault.database import AsyncSessionLocal
