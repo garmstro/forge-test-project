@@ -41,9 +41,22 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 ## 5. Rate Limiting
 
-**Decision:** **No application-level rate limiting** is implemented in this phase.
+**Decision:** **In-process, per-IP sliding-window rate limiting** (`linkvault/services/ratelimit.py`), enforced by FastAPI dependencies in `linkvault/api/deps.py`:
 
-**Rationale:** The redirect endpoint is designed for sub-10 ms resolution via a single indexed DB lookup. Infrastructure-level rate limiting (e.g., nginx `limit_req`, Caddy rate-limit middleware, or a cloud WAF) is the recommended approach for production deployments and avoids adding latency or complexity to the hot path. This decision is revisable in a future phase.
+| Endpoint | Setting | Default |
+|---|---|---|
+| `GET /{slug}` | `RATE_LIMIT_REDIRECT_PER_MINUTE` | 120 / minute |
+| `POST /users/register`, `POST /users/token` (shared budget) | `RATE_LIMIT_API_PER_MINUTE` | 60 / minute |
+
+`RATE_LIMIT_ENABLED=false` turns limiting off.
+
+**Details:**
+- **Algorithm:** sliding log over a 60-second window — each key keeps the timestamps of accepted requests. Rejected requests are not recorded, so a client regains access as soon as its oldest request leaves the window. Keys with no hits in the window are pruned periodically to bound memory.
+- **Key:** `request.client.host`. `X-Forwarded-For` is **not** trusted because any client can set it. Behind a reverse proxy all traffic shares the proxy's IP; configure uvicorn's `--proxy-headers`/`--forwarded-allow-ips` only for a trusted proxy, or rate-limit at the proxy.
+- **Ordering:** the check is a route-level dependency, resolved before `get_db`, so a limited request never opens a session or queries the database. The cost on the redirect hot path is an in-memory deque operation under a lock.
+- **Response:** `429` with `{"error": "rate_limited", "detail": "Too many requests."}` and a `Retry-After` header (seconds), produced by an exception handler in `linkvault/main.py` alongside the existing error envelope.
+
+**Limitation:** state lives in the memory of a single process. It is not shared between uvicorn workers or hosts (each worker enforces its own limit, so the effective limit is multiplied by the worker count) and is lost on restart. This matches the "no external services" constraint; a shared store (e.g. Redis) or infrastructure-level limiting (nginx `limit_req`, Caddy, a cloud WAF) is recommended for multi-process or multi-instance production deployments.
 
 ---
 

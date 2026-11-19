@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +19,11 @@ class Settings(BaseSettings):
 
     # APScheduler persistent job store
     SCHEDULER_DB_URL: str = "sqlite:///./scheduler.db"
+
+    # Rate limiting (in-process, per client IP, 60-second sliding window)
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REDIRECT_PER_MINUTE: int = Field(default=120, ge=1)  # GET /{slug}
+    RATE_LIMIT_API_PER_MINUTE: int = Field(default=60, ge=1)  # POST /users/register, /users/token
 
     # Application version
     VERSION: str = "0.1.0"

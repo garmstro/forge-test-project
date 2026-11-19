@@ -11,6 +11,7 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.services.ratelimit import RateLimitExceeded
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -36,6 +37,16 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"error": "validation_error", "detail": f"{field}: {msg}"},
+        )
+
+    @application.exception_handler(RateLimitExceeded)
+    async def rate_limit_exception_handler(
+        request: Request, exc: RateLimitExceeded
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={"error": "rate_limited", "detail": "Too many requests."},
+            headers={"Retry-After": str(exc.retry_after)},
         )
 
     @application.exception_handler(Exception)
