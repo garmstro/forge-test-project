@@ -64,4 +64,4 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 - `linkvault delete` asks for confirmation unless `--yes`/`-y` is passed, because deletion cannot be undone from the CLI.
 - Status in `linkvault list` is derived on the client: `expired` (past `expires_at`), `exhausted` (`click_count >= max_clicks`), otherwise `active`.
 
-**Rationale:** Because login rotates the API key (section 6), storing the key locally is the only way to stay logged in. Saving the server URL with it avoids silently sending a key to a different server.
+**Rationale:** Because login rotates the API key (section 6), storing the key locally is the only way to stay logged in. Saving the server URL with it means later commands talk to the server you logged in to by default (an explicit `--api-url` / `LINKVAULT_API_URL` still takes precedence and receives the stored key).
