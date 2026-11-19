@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from linkvault.api.deps import rate_limit_api
 from linkvault.database import get_db
 from linkvault.models.user import User
 from linkvault.schemas.user import (
@@ -36,6 +37,7 @@ def _hash_api_key(raw_key: str) -> str:
     "/register",
     response_model=UserRegisterResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_api)],
 )
 async def register(
     payload: UserRegister,
@@ -67,7 +69,11 @@ async def register(
     )
 
 
-@router.post("/token", response_model=TokenResponse)
+@router.post(
+    "/token",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit_api)],
+)
 async def get_token(
     payload: UserLogin,
     db: AsyncSession = Depends(get_db),

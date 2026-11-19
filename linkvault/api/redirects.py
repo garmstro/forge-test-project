@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from linkvault.api.deps import rate_limit_redirect
 from linkvault.database import get_db
 from linkvault.models.click import Click
 from linkvault.models.link import Link
@@ -30,7 +31,13 @@ def _anonymize_ip(ip: str | None) -> str | None:
     return ip
 
 
-@router.get("/{slug}", response_model=None)
+@router.get(
+    "/{slug}",
+    response_model=None,
+    # Route-level dependencies are resolved before get_db, so a rate-limited
+    # request never opens a session or touches the database.
+    dependencies=[Depends(rate_limit_redirect)],
+)
 async def redirect(
     slug: str,
     request: Request,
@@ -43,6 +50,7 @@ async def redirect(
     - 302  Temporary redirect (link has an expiry or click cap).
     - 404  Slug not found.
     - 410  Link expired or click cap reached.
+    - 429  Per-IP rate limit exceeded (checked before the DB lookup).
     """
     # ------------------------------------------------------------------
     # Single indexed lookup — must complete in < 10 ms at the DB level.
