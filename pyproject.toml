@@ -48,3 +48,8 @@ python_version = "3.11"
 ignore_missing_imports = false
 warn_return_any = true
 warn_unused_ignores = true
+
+# APScheduler 3.x ships without type hints / py.typed.
+[[tool.mypy.overrides]]
+module = ["apscheduler", "apscheduler.*"]
+ignore_missing_imports = true

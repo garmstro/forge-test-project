@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -11,9 +14,32 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.services.cleanup import create_scheduler
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    """Start the background scheduler with the app and stop it on shutdown.
+
+    The scheduler is kept on ``application.state.scheduler`` so other parts
+    of the app (e.g. the health check) can inspect it.
+    """
+    scheduler = create_scheduler()
+    scheduler.start()
+    application.state.scheduler = scheduler
+    logger.info("Scheduler started (cleanup every 15 minutes).")
+    try:
+        yield
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+            # AsyncIOScheduler.shutdown() is scheduled onto the event loop;
+            # yield once so it actually runs before the loop is torn down.
+            await asyncio.sleep(0)
+        logger.info("Scheduler stopped.")
 
 
 def create_app() -> FastAPI:
@@ -21,7 +47,9 @@ def create_app() -> FastAPI:
         title="LinkVault",
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
+        lifespan=lifespan,
     )
+    application.state.scheduler = None
 
     # ------------------------------------------------------------------
     # Custom error envelope: {"error": "...", "detail": "..."}
@@ -70,4 +98,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
