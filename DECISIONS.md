@@ -53,3 +53,10 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
 
+---
+
+## 7. Expired Links After Cleanup (410 → 404)
+
+**Decision:** The cleanup job (every 15 minutes) soft-deletes expired links exactly as the spec describes. Between expiry and the next cleanup run, `GET /{slug}` returns `410 {"error": "link_expired"}`; after cleanup the link is treated like any deleted link and returns `404 {"error": "not_found"}`.
+
+**Rationale:** Soft-deleting expired links frees their slugs for reuse (consistent with §3) and keeps the redirect lookup a single indexed query on active links. Keeping a permanent 410 would require either never freeing the slug or an extra lookup over deleted rows on every miss. This is an open product question and can be revisited (e.g. by distinguishing "expired" from "user-deleted" rows) if a lasting 410 is preferred.

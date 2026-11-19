@@ -228,9 +228,20 @@ SECRET_KEY=changeme-use-a-real-secret
 BASE_URL=http://localhost:8000
 LOG_LEVEL=INFO
 SCHEDULER_DB_URL=sqlite:///./scheduler.db
+CLEANUP_INTERVAL_MINUTES=15
 ```
 
 All settings are validated at startup via `pydantic-settings`. The application will **fail loudly** if required settings are missing or malformed.
+
+### Expired link cleanup
+
+When the server starts, an APScheduler job runs every `CLEANUP_INTERVAL_MINUTES` (default 15). It soft-deletes every link whose `expires_at` is in the past and that is not already deleted (one `UPDATE` statement; already-deleted links keep their original `deleted_at`). Each run logs one line such as:
+
+```json
+{"event": "cleanup", "links_expired": 3, "timestamp": "2025-01-15T12:00:00+00:00"}
+```
+
+The job is stored in the SQLite file set by `SCHEDULER_DB_URL`, under a fixed id, so it survives restarts without being duplicated. `GET /health` reports `"scheduler": "running"` while the scheduler is active (`"stopped"` or `"paused"` otherwise). Once cleaned up, an expired link's slug can be reused, and visiting it returns `404 {"error": "not_found"}` instead of `410`.
 
 ---
 
