@@ -106,6 +106,7 @@ linkvault stats <slug> [--days N]
 linkvault delete <slug>
 ```
 
+Credentials are stored in `~/.linkvault/config.json` (override the directory with `LINKVAULT_CONFIG_DIR`).
 The CLI reads `LINKVAULT_API_URL` from the environment (default: `http://localhost:8000`) or accepts `--api-url` on every command.
 
 ---
@@ -228,7 +229,10 @@ SECRET_KEY=changeme-use-a-real-secret
 BASE_URL=http://localhost:8000
 LOG_LEVEL=INFO
 SCHEDULER_DB_URL=sqlite:///./scheduler.db
+SCHEDULER_ENABLED=true
 ```
+
+`SECRET_KEY` is required: the server refuses to start without it. Set `SCHEDULER_ENABLED=false` to disable the background cleanup job (e.g. in one-off scripts).
 
 All settings are validated at startup via `pydantic-settings`. The application will **fail loudly** if required settings are missing or malformed.
 
@@ -283,7 +287,7 @@ linkvault/
 
 See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectural choice, including:
 
-- **Slug collision strategy** — up to 5 retries with exponential back-off before returning a `409 Conflict`; probability of exhaustion at normal scale is negligible.
+- **Slug collision strategy** — up to 5 immediate retries (no back-off) before returning a `409 Conflict`; probability of exhaustion at normal scale is negligible.
 - **Click-count consistency** — `links.click_count` is the authoritative counter (atomically incremented via `UPDATE … SET click_count = click_count + 1`); the `clicks` table is used exclusively for detailed analytics. A discrepancy caused by a failed insert is acceptable and self-documents in logs.
 - **Soft-delete and analytics** — clicks are tied to `link_id` (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
