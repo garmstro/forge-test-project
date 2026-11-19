@@ -19,8 +19,10 @@ router = APIRouter(tags=["redirects"])
 def _anonymize_ip(ip: str | None) -> str | None:
     """Zero the last octet of an IPv4 address for privacy.
 
-    IPv6 addresses are returned unchanged (full anonymisation is out of scope
-    for this phase — see DECISIONS.md §5).
+    IPv6 addresses are returned unchanged (full IPv6 anonymisation is not yet
+    implemented).  Note that the per-IP rate limiter (DECISIONS.md §5) keys on
+    the raw ``request.client.host``; it holds it only in process memory for
+    the length of the rate-limit window and never persists it.
     """
     if ip is None:
         return None

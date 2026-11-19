@@ -228,9 +228,22 @@ SECRET_KEY=changeme-use-a-real-secret
 BASE_URL=http://localhost:8000
 LOG_LEVEL=INFO
 SCHEDULER_DB_URL=sqlite:///./scheduler.db
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REDIRECT_PER_MINUTE=120
+RATE_LIMIT_API_PER_MINUTE=60
 ```
 
 All settings are validated at startup via `pydantic-settings`. The application will **fail loudly** if required settings are missing or malformed.
+
+Rate-limit settings:
+
+| Setting | Default | Applies to |
+|---|---|---|
+| `RATE_LIMIT_ENABLED` | `true` | Master switch; `false` disables all limits |
+| `RATE_LIMIT_REDIRECT_PER_MINUTE` | `120` | `GET /{slug}`, per client IP |
+| `RATE_LIMIT_API_PER_MINUTE` | `60` | `POST /users/register` and `POST /users/token` combined, per client IP |
+
+Limits are kept in process memory: with several uvicorn workers each worker counts separately, and counters reset on restart.
 
 ---
 
@@ -287,5 +300,5 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectu
 - **Click-count consistency** — `links.click_count` is the authoritative counter (atomically incremented via `UPDATE … SET click_count = click_count + 1`); the `clicks` table is used exclusively for detailed analytics. A discrepancy caused by a failed insert is acceptable and self-documents in logs.
 - **Soft-delete and analytics** — clicks are tied to `link_id` (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
-- **Rate limiting** — no rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.
+- **Rate limiting** — in-process, per-client-IP sliding-window limits (60-second window): `GET /{slug}` allows `RATE_LIMIT_REDIRECT_PER_MINUTE` (default 120) and `POST /users/register` + `POST /users/token` share `RATE_LIMIT_API_PER_MINUTE` (default 60). Exceeding a limit returns `429` with `{"error": "rate_limited", "detail": "Too many requests."}` and a `Retry-After` header; the check runs before any DB lookup. The key is the direct peer address (`X-Forwarded-For` is not trusted). State is held in memory in a single process: it is not shared across workers or hosts and resets on restart, so multi-worker or multi-instance deployments should still rate-limit at the reverse proxy. See [DECISIONS.md §5](DECISIONS.md).
 
