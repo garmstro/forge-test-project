@@ -5,13 +5,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.api.deps import get_current_user
+from linkvault.api.rate_limit import rate_limit
+from linkvault.config import settings
 from linkvault.database import get_db
 from linkvault.models.link import Link
 from linkvault.models.user import User
 from linkvault.schemas.analytics import LinkAnalyticsResponse, SummaryResponse
 from linkvault.services.analytics import get_link_analytics, get_user_summary
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+router = APIRouter(
+    prefix="/analytics",
+    tags=["analytics"],
+    dependencies=[Depends(rate_limit("api", lambda: settings.RATE_LIMIT_API_PER_MINUTE))],
+)
 
 
 # ---------------------------------------------------------------------------

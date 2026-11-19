@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from linkvault.database import Base, get_db
 from linkvault.main import app
+from linkvault.services.rate_limiter import limiter
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -77,9 +78,11 @@ async def client(db_session: AsyncSession, db_engine):
                 raise
 
     app.dependency_overrides[get_db] = override_get_db
+    limiter.reset()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
     app.dependency_overrides.clear()
+    limiter.reset()
 

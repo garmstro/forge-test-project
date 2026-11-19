@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     # APScheduler persistent job store
     SCHEDULER_DB_URL: str = "sqlite:///./scheduler.db"
 
+    # Rate limiting (in-memory, per process, per client IP)
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 10
+    RATE_LIMIT_API_PER_MINUTE: int = 60
+    RATE_LIMIT_REDIRECT_PER_MINUTE: int = 300
+
     # Application version
     VERSION: str = "0.1.0"
 

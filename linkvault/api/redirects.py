@@ -8,11 +8,18 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from linkvault.api.rate_limit import rate_limit
+from linkvault.config import settings
 from linkvault.database import get_db
 from linkvault.models.click import Click
 from linkvault.models.link import Link
 
-router = APIRouter(tags=["redirects"])
+router = APIRouter(
+    tags=["redirects"],
+    dependencies=[
+        Depends(rate_limit("redirect", lambda: settings.RATE_LIMIT_REDIRECT_PER_MINUTE))
+    ],
+)
 
 
 def _anonymize_ip(ip: str | None) -> str | None:
