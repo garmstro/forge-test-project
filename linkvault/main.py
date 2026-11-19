@@ -11,6 +11,7 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.services.scheduler import get_scheduler, init_scheduler, shutdown_scheduler
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -55,14 +56,38 @@ def create_app() -> FastAPI:
     application.include_router(redirects_router)  # must be last (catches /{slug})
 
     # ------------------------------------------------------------------
+    # Startup and shutdown events
+    # ------------------------------------------------------------------
+    @application.on_event("startup")
+    async def startup_event() -> None:
+        """Initialize scheduler on app startup."""
+        try:
+            await init_scheduler()
+            logger.info("Scheduler initialized successfully")
+        except Exception as e:
+            logger.exception("Failed to initialize scheduler: %s", e)
+            raise
+
+    @application.on_event("shutdown")
+    async def shutdown_event() -> None:
+        """Shutdown scheduler on app shutdown."""
+        try:
+            await shutdown_scheduler()
+            logger.info("Scheduler shut down successfully")
+        except Exception as e:
+            logger.exception("Error during scheduler shutdown: %s", e)
+
+    # ------------------------------------------------------------------
     # Health endpoint
     # ------------------------------------------------------------------
     @application.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
+        scheduler = get_scheduler()
+        scheduler_status = "running" if scheduler is not None and scheduler.running else "not_started"
         return {
             "status": "ok",
             "db": "ok",
-            "scheduler": "not_started",
+            "scheduler": scheduler_status,
             "version": settings.VERSION,
         }
 
@@ -70,4 +95,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
