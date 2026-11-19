@@ -53,3 +53,16 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
 
+---
+
+## 7. Expired-Link Cleanup: 410 → 404 and Slug Reuse
+
+**Decision:** The cleanup job (every 15 minutes, all times UTC) soft-deletes links whose `expires_at` has passed by setting `deleted_at = now`, exactly as if the owner had called `DELETE /links/{slug}`. Links that are already soft-deleted keep their original `deleted_at`.
+
+**Consequences:**
+- **410 vs. 404:** Between the moment a link expires and the next cleanup run (at most ~15 minutes), `GET /{slug}` returns `410 Gone` (`{"error": "link_expired"}`). After cleanup the link is soft-deleted, so the same request returns `404` (`{"error": "not_found"}`). Clients should treat both as "this short link no longer works".
+- **Slug reuse:** Because slug uniqueness is enforced only among non-deleted links, an expired slug becomes available to *any* user once cleanup has run. Click history stays attached to the old link's UUID (see §3), so a new owner never sees the previous owner's analytics.
+- **Owner views:** After cleanup, the expired link disappears from `GET /links`, `GET /links/{slug}`, `GET /analytics/{slug}`, and the summary counts, consistent with a manual delete.
+- **Click-capped links** (`max_clicks` reached) are **not** cleaned up by this job; they keep returning `410` until the owner updates or deletes them.
+
+**Scheduling:** The job is stored in APScheduler's SQLite job store (`SCHEDULER_DB_URL`) under a fixed id with `replace_existing=True`, so restarts reuse the single persisted job instead of adding a duplicate. Missed runs are coalesced into one. A failing run is logged (`{"event": "cleanup_failed", ...}`) and the next run happens as scheduled.

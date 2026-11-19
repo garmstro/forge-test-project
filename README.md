@@ -25,7 +25,7 @@ Updated by Forge — 18 November 2026, 17:02 UTC
 
 ## Overview
 
-LinkVault is a self-hosted URL shortener with first-class analytics. It exposes a REST API for managing short links, tracks every click with anonymised metadata, and surfaces aggregated statistics through both the API and a Rich-powered terminal dashboard. A background scheduler automatically expires stale links every 15 minutes.
+LinkVault is a self-hosted URL shortener with first-class analytics. It exposes a REST API for managing short links, tracks every click with anonymised metadata, and surfaces aggregated statistics through both the API and a Rich-powered terminal dashboard. A background scheduler soft-deletes expired links every 15 minutes.
 
 Everything runs **locally with zero paid dependencies** — no external services, no cloud accounts required.
 
@@ -37,7 +37,7 @@ Everything runs **locally with zero paid dependencies** — no external services
 - **Redirect engine** — single-query slug resolution with atomic click-count increments; `301` for permanent links, `302` for capped/expiring ones, `410` when a link is exhausted.
 - **Click analytics** — per-link breakdown by day, unique IPs, top referers, and top user-agents; user-level summary across all links.
 - **Authentication** — email + password registration; API key (UUID4) issued on registration and exchangeable via `/users/token`; all protected routes use `Authorization: Bearer <api_key>`.
-- **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) expires links every 15 minutes and emits structured JSON log lines.
+- **Background cleanup** — an APScheduler job runs every 15 minutes (UTC) and soft-deletes every link whose `expires_at` has passed and that isn't already deleted, in a single `UPDATE`. Each run logs one structured line, e.g. `{"event": "cleanup", "links_expired": 3, "timestamp": "2025-06-01T12:00:00+00:00"}` (also when nothing expired); failures are logged and the next run still happens. The schedule lives in the SQLite job store at `SCHEDULER_DB_URL`, so it survives restarts without duplicating the job. After cleanup an expired slug returns `404` instead of `410` and can be reused (see `DECISIONS.md` §7). Click-capped links are not touched.
 - **Terminal CLI** — `linkvault` command for every API operation, with Rich tables, bold-green short URLs, and a bar-chart view of daily click data.
 - **Health endpoint** — `/health` reports DB and scheduler status; returns `503` when the database is unreachable.
 
@@ -274,7 +274,8 @@ linkvault/
     ├── test_links.py
     ├── test_redirects.py
     ├── test_analytics.py
-    └── test_auth.py
+    ├── test_auth.py
+    └── test_cleanup.py
 ```
 
 ---
@@ -287,5 +288,6 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectu
 - **Click-count consistency** — `links.click_count` is the authoritative counter (atomically incremented via `UPDATE … SET click_count = click_count + 1`); the `clicks` table is used exclusively for detailed analytics. A discrepancy caused by a failed insert is acceptable and self-documents in logs.
 - **Soft-delete and analytics** — clicks are tied to `link_id` (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
+- **Expired-link cleanup** — expired links are soft-deleted by the 15-minute job, so their redirect changes from `410` to `404` and the slug becomes reusable by anyone; click-capped links are left alone.
 - **Rate limiting** — no rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.
 
