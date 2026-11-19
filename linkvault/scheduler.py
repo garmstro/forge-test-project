@@ -43,10 +43,7 @@ def start_scheduler() -> None:
         return
 
     try:
-        _scheduler = AsyncIOScheduler()
-
-        # Configure the SQLAlchemy job store for persistence
-        _scheduler.configure(
+        _scheduler = AsyncIOScheduler(
             jobstores={
                 "default": {
                     "type": "sqlalchemy",

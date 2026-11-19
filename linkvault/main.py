@@ -64,15 +64,7 @@ def create_app() -> FastAPI:
         stop_scheduler()
 
     # ------------------------------------------------------------------
-    # Routers
-    # ------------------------------------------------------------------
-    application.include_router(users_router)
-    application.include_router(links_router)
-    application.include_router(analytics_router)
-    application.include_router(redirects_router)  # must be last (catches /{slug})
-
-    # ------------------------------------------------------------------
-    # Health endpoint
+    # Health endpoint — must be before redirects router (catch-all /{slug})
     # ------------------------------------------------------------------
     @application.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
@@ -83,6 +75,14 @@ def create_app() -> FastAPI:
             "scheduler": scheduler_status,
             "version": settings.VERSION,
         }
+
+    # ------------------------------------------------------------------
+    # Routers
+    # ------------------------------------------------------------------
+    application.include_router(users_router)
+    application.include_router(links_router)
+    application.include_router(analytics_router)
+    application.include_router(redirects_router)  # must be last (catches /{slug})
 
     return application
 
