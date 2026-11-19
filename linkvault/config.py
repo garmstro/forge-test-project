@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +19,9 @@ class Settings(BaseSettings):
 
     # APScheduler persistent job store
     SCHEDULER_DB_URL: str = "sqlite:///./scheduler.db"
+
+    # How often the expired-link cleanup job runs (minutes; fractions allowed)
+    CLEANUP_INTERVAL_MINUTES: float = Field(default=15.0, gt=0)
 
     # Application version
     VERSION: str = "0.1.0"
