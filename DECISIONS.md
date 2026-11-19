@@ -53,3 +53,16 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
 
+---
+
+## 7. Expired-Link Cleanup Scheduler
+
+**Decision:** An APScheduler `AsyncIOScheduler` runs inside the FastAPI lifespan and executes `linkvault.services.cleanup.run_cleanup_job` every **15 minutes**. Jobs are persisted in a SQLAlchemy/SQLite job store (`SCHEDULER_DB_URL`, default `sqlite:///./scheduler.db`) and registered with a fixed job id and `replace_existing=True`, so a restart neither loses nor duplicates the job.
+
+**Behaviour:** Links with `expires_at < now` and `deleted_at IS NULL` are *soft-deleted* (`deleted_at = now`) using a single `UPDATE`; rows are never physically removed, so click history is kept. Each run logs a JSON line `{"event": "cleanup", "links_expired": N, "timestamp": "..."}`.
+
+**Operational notes:**
+- `SCHEDULER_ENABLED=false` disables the scheduler (useful for scripts and tests).
+- The lifespan calls `settings.validate_required()`, so the server fails loudly if `SECRET_KEY` is missing.
+- `GET /health` runs `SELECT 1` and reports `503` with `"db": "error"` if it fails; `scheduler` is `running` or `stopped`. The route is registered *before* the catch-all `/{slug}` redirect router, otherwise it would be shadowed.
+
