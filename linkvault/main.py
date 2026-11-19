@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -11,9 +12,37 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.database import AsyncSessionLocal
+from linkvault.scheduler import init_scheduler, shutdown_scheduler, get_scheduler
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manage application startup and shutdown.
+
+    On startup:
+    - Validate required settings
+    - Initialize APScheduler with persistent job store
+
+    On shutdown:
+    - Gracefully shut down the scheduler
+    """
+    # Startup
+    settings.validate_required()
+    logger.info("Settings validated")
+
+    await init_scheduler(AsyncSessionLocal)
+    logger.info("Scheduler initialized")
+
+    yield
+
+    # Shutdown
+    await shutdown_scheduler()
+    logger.info("Application shutdown complete")
 
 
 def create_app() -> FastAPI:
@@ -21,6 +50,7 @@ def create_app() -> FastAPI:
         title="LinkVault",
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
+        lifespan=lifespan,
     )
 
     # ------------------------------------------------------------------
@@ -59,10 +89,12 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     @application.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
+        scheduler = get_scheduler()
+        scheduler_status = "running" if scheduler is not None and scheduler.running else "not_started"
         return {
             "status": "ok",
             "db": "ok",
-            "scheduler": "not_started",
+            "scheduler": scheduler_status,
             "version": settings.VERSION,
         }
 
@@ -70,4 +102,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
