@@ -73,6 +73,7 @@ async def test_cleanup_expired_links_marks_expired_as_deleted(
 
     # Run cleanup
     await cleanup_expired_links(db_session)
+    await db_session.commit()
 
     # Refresh from DB
     await db_session.refresh(expired_link)
@@ -114,6 +115,7 @@ async def test_cleanup_expired_links_ignores_already_deleted(
 
     # Run cleanup
     await cleanup_expired_links(db_session)
+    await db_session.commit()
 
     # Refresh from DB
     await db_session.refresh(already_deleted)
@@ -152,6 +154,7 @@ async def test_cleanup_expired_links_handles_multiple_expired(
 
     # Run cleanup
     await cleanup_expired_links(db_session)
+    await db_session.commit()
 
     # Verify: all are deleted
     for link in links:
@@ -195,6 +198,7 @@ async def test_cleanup_expired_links_logs_structured_json(
 
     # Run cleanup
     await cleanup_expired_links(db_session)
+    await db_session.commit()
 
     # Find the log entry with the cleanup event
     cleanup_logs = [
@@ -246,6 +250,7 @@ async def test_cleanup_expired_links_logs_zero_when_none_expired(
 
     # Run cleanup
     await cleanup_expired_links(db_session)
+    await db_session.commit()
 
     # Find the log entry
     cleanup_logs = [

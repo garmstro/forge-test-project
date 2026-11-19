@@ -24,6 +24,8 @@ async def cleanup_expired_links(db: AsyncSession) -> None:
     set deleted_at = now, and log structured JSON.
 
     This job is designed to be called by APScheduler every 15 minutes.
+    
+    Note: The caller is responsible for committing the session.
     """
     now = _utc_now()
 
@@ -48,7 +50,6 @@ async def cleanup_expired_links(db: AsyncSession) -> None:
             .values(deleted_at=now)
         )
         await db.execute(update_stmt)
-        await db.commit()
 
     # Log structured JSON
     log_entry = {
