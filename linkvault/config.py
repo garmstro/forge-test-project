@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     # APScheduler persistent job store
     SCHEDULER_DB_URL: str = "sqlite:///./scheduler.db"
+    SCHEDULER_ENABLED: bool = True
 
     # Application version
     VERSION: str = "0.1.0"
