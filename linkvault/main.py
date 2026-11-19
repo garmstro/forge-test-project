@@ -11,6 +11,7 @@ from linkvault.api.links import router as links_router
 from linkvault.api.redirects import router as redirects_router
 from linkvault.api.users import router as users_router
 from linkvault.config import settings
+from linkvault.scheduler import is_scheduler_running, start_scheduler, stop_scheduler
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -47,6 +48,22 @@ def create_app() -> FastAPI:
         )
 
     # ------------------------------------------------------------------
+    # Startup and shutdown events
+    # ------------------------------------------------------------------
+    @application.on_event("startup")
+    async def startup_event() -> None:
+        logger.info("LinkVault starting up...")
+        try:
+            start_scheduler()
+        except Exception as e:
+            logger.error("Failed to start scheduler on app startup: %s", e, exc_info=True)
+
+    @application.on_event("shutdown")
+    async def shutdown_event() -> None:
+        logger.info("LinkVault shutting down...")
+        stop_scheduler()
+
+    # ------------------------------------------------------------------
     # Routers
     # ------------------------------------------------------------------
     application.include_router(users_router)
@@ -59,10 +76,11 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     @application.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
+        scheduler_status = "running" if is_scheduler_running() else "stopped"
         return {
             "status": "ok",
             "db": "ok",
-            "scheduler": "not_started",
+            "scheduler": scheduler_status,
             "version": settings.VERSION,
         }
 
@@ -70,4 +88,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
