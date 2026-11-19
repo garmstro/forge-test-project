@@ -53,3 +53,15 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
 
+
+---
+
+## 7. CLI Credentials, Expiry Dates and Deletion
+
+**Decision:**
+- `linkvault login` stores `{api_url, email, api_key}` in `~/.linkvault/config.json` with `0600` permissions. The saved `api_url` is reused when neither `--api-url` nor `LINKVAULT_API_URL` is given. `LINKVAULT_CONFIG_DIR` overrides the directory.
+- `--expires YYYY-MM-DD` is sent as the **end of that day in UTC** (`YYYY-MM-DDT23:59:59Z`), so a link expiring "on" a date works for the whole day, consistent with the UTC default in section 4.
+- `linkvault delete` asks for confirmation unless `--yes`/`-y` is passed, because deletion cannot be undone from the CLI.
+- Status in `linkvault list` is derived on the client: `expired` (past `expires_at`), `exhausted` (`click_count >= max_clicks`), otherwise `active`.
+
+**Rationale:** Because login rotates the API key (section 6), storing the key locally is the only way to stay logged in. Saving the server URL with it avoids silently sending a key to a different server.

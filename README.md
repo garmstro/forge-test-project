@@ -103,10 +103,17 @@ linkvault shorten <url> [--slug SLUG] [--expires YYYY-MM-DD] [--max-clicks N]
 linkvault list [--page N]
 linkvault info <slug>
 linkvault stats <slug> [--days N]
-linkvault delete <slug>
+linkvault delete <slug> [--yes]
 ```
 
-The CLI reads `LINKVAULT_API_URL` from the environment (default: `http://localhost:8000`) or accepts `--api-url` on every command.
+The CLI reads `LINKVAULT_API_URL` from the environment or accepts `--api-url` on every command. Without either it uses the URL saved at login, then `http://localhost:8000`.
+
+Notes:
+
+- `login` calls `POST /users/token`, which **issues a new API key and invalidates the old one** (see `DECISIONS.md` §6). The key is stored in `~/.linkvault/config.json` with `0600` permissions. Set `LINKVAULT_CONFIG_DIR` to use a different directory.
+- `--expires YYYY-MM-DD` means the end of that day in UTC (`23:59:59Z`).
+- `delete` asks for confirmation; pass `--yes` / `-y` to skip it.
+- API errors are printed in red with the API's `detail` message, and the command exits with code `1`.
 
 ---
 
@@ -268,13 +275,16 @@ linkvault/
 │   │   ├── analytics.py     # Click aggregation logic
 │   │   └── cleanup.py       # Expired link purge job
 │   └── cli/
-│       └── app.py           # Typer CLI app
+│       ├── app.py           # Typer CLI commands (Rich output)
+│       ├── client.py        # httpx API client used by the CLI
+│       └── config.py        # ~/.linkvault/config.json credential store
 └── tests/
     ├── conftest.py
     ├── test_links.py
     ├── test_redirects.py
     ├── test_analytics.py
-    └── test_auth.py
+    ├── test_auth.py
+    └── test_cli.py
 ```
 
 ---
