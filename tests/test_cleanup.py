@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -17,13 +18,22 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _create_test_user(email: str = "test@example.com") -> User:
+    """Helper to create a test user with all required fields."""
+    return User(
+        email=email,
+        password_hash="hash",
+        api_key_hash=str(uuid.uuid4()),
+    )
+
+
 @pytest.mark.asyncio
 async def test_cleanup_expired_links_marks_expired_as_deleted(
     db_session: AsyncSession,
 ) -> None:
     """Test that cleanup_expired_links marks expired links as deleted."""
     # Create a user
-    user = User(email="test@example.com", password_hash="hash")
+    user = _create_test_user()
     db_session.add(user)
     await db_session.flush()
 
@@ -81,7 +91,7 @@ async def test_cleanup_expired_links_ignores_already_deleted(
 ) -> None:
     """Test that cleanup_expired_links does not re-delete already-deleted links."""
     # Create a user
-    user = User(email="test@example.com", password_hash="hash")
+    user = _create_test_user()
     db_session.add(user)
     await db_session.flush()
 
@@ -118,7 +128,7 @@ async def test_cleanup_expired_links_handles_multiple_expired(
 ) -> None:
     """Test that cleanup_expired_links handles multiple expired links."""
     # Create a user
-    user = User(email="test@example.com", password_hash="hash")
+    user = _create_test_user()
     db_session.add(user)
     await db_session.flush()
 
@@ -161,7 +171,7 @@ async def test_cleanup_expired_links_logs_structured_json(
     caplog.set_level(logging.INFO)
 
     # Create a user
-    user = User(email="test@example.com", password_hash="hash")
+    user = _create_test_user()
     db_session.add(user)
     await db_session.flush()
 
@@ -215,7 +225,7 @@ async def test_cleanup_expired_links_logs_zero_when_none_expired(
     caplog.set_level(logging.INFO)
 
     # Create a user
-    user = User(email="test@example.com", password_hash="hash")
+    user = _create_test_user()
     db_session.add(user)
     await db_session.flush()
 

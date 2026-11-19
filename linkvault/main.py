@@ -32,17 +32,29 @@ async def lifespan(app: FastAPI):
     - Gracefully shut down the scheduler
     """
     # Startup
-    settings.validate_required()
-    logger.info("Settings validated")
+    try:
+        settings.validate_required()
+        logger.info("Settings validated")
+    except Exception as e:
+        logger.error("Settings validation failed: %s", e)
+        raise
 
-    await init_scheduler(AsyncSessionLocal)
-    logger.info("Scheduler initialized")
+    try:
+        await init_scheduler(AsyncSessionLocal)
+        logger.info("Scheduler initialized")
+    except Exception as e:
+        logger.error("Scheduler initialization failed: %s", e)
+        # Don't re-raise - allow the app to start even if scheduler fails
+        logger.warning("Application will continue without scheduler")
 
     yield
 
     # Shutdown
-    await shutdown_scheduler()
-    logger.info("Application shutdown complete")
+    try:
+        await shutdown_scheduler()
+        logger.info("Application shutdown complete")
+    except Exception as e:
+        logger.error("Error during shutdown: %s", e)
 
 
 def create_app() -> FastAPI:

@@ -16,17 +16,24 @@ logger = logging.getLogger(__name__)
 _scheduler: AsyncIOScheduler | None = None
 
 
-async def init_scheduler(db_factory: async_sessionmaker[AsyncSession]) -> AsyncIOScheduler:
+async def init_scheduler(db_factory: async_sessionmaker[AsyncSession]) -> AsyncIOScheduler | None:
     """
     Initialize and start the APScheduler with a persistent SQLite job store.
 
     The job store is backed by SCHEDULER_DB_URL (default: sqlite:///./scheduler.db).
     This ensures jobs survive application restarts.
+
+    Returns None if scheduler initialization is skipped (e.g., in test environments).
     """
     global _scheduler
 
     if _scheduler is not None:
         return _scheduler
+
+    # Skip scheduler initialization for in-memory test databases
+    if ":memory:" in settings.DATABASE_URL:
+        logger.info("Skipping scheduler initialization for in-memory test database")
+        return None
 
     # Create the job store with the configured database URL
     # Note: APScheduler's SQLAlchemy job store uses synchronous SQLAlchemy,
@@ -54,9 +61,13 @@ async def init_scheduler(db_factory: async_sessionmaker[AsyncSession]) -> AsyncI
         replace_existing=True,  # Replace if already scheduled (e.g., on app restart)
     )
 
-    scheduler.start()
-    _scheduler = scheduler
-    logger.info("APScheduler started with cleanup job (every 15 minutes)")
+    try:
+        scheduler.start()
+        _scheduler = scheduler
+        logger.info("APScheduler started with cleanup job (every 15 minutes)")
+    except Exception as e:
+        logger.error("Failed to start APScheduler: %s", e)
+        raise
 
     return scheduler
 
@@ -66,9 +77,13 @@ async def shutdown_scheduler() -> None:
     global _scheduler
 
     if _scheduler is not None:
-        _scheduler.shutdown(wait=True)
-        _scheduler = None
-        logger.info("APScheduler shut down")
+        try:
+            _scheduler.shutdown(wait=True)
+        except Exception as e:
+            logger.error("Error shutting down scheduler: %s", e)
+        finally:
+            _scheduler = None
+            logger.info("APScheduler shut down")
 
 
 def get_scheduler() -> AsyncIOScheduler | None:
