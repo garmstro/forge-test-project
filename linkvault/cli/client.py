@@ -43,9 +43,18 @@ class LinkVaultClient:
         api_key: str | None = None,
         transport: httpx.BaseTransport | None = None,
         timeout: float = DEFAULT_TIMEOUT,
+        http: httpx.Client | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        if http is not None:
+            # Pre-built client (e.g. Starlette's TestClient in tests); the
+            # caller owns its lifecycle, so close() leaves it open.
+            http.headers.update(headers)
+            self._client = http
+            self._owns_client = False
+            return
+        self._owns_client = True
         self._client = httpx.Client(
             base_url=self.base_url,
             headers=headers,
@@ -54,7 +63,8 @@ class LinkVaultClient:
         )
 
     def close(self) -> None:
-        self._client.close()
+        if self._owns_client:
+            self._client.close()
 
     def __enter__(self) -> LinkVaultClient:
         return self
