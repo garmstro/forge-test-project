@@ -10,7 +10,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from linkvault.config import settings
-from linkvault.database import async_session_maker
+from linkvault.database import AsyncSessionLocal
 from linkvault.services.cleanup import cleanup_expired_links
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ def get_scheduler() -> AsyncIOScheduler | None:
 
 async def _cleanup_job() -> None:
     """Job wrapper: acquire a session and run the cleanup task."""
-    async with async_session_maker() as session:
+    async with AsyncSessionLocal() as session:
         await cleanup_expired_links(session)
 
 
