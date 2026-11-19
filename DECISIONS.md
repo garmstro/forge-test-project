@@ -41,9 +41,15 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 ## 5. Rate Limiting
 
-**Decision:** **No application-level rate limiting** is implemented in this phase.
+**Decision:** **Application-level rate limiting now exists.** An in-memory sliding-window limiter (`linkvault/services/rate_limiter.py`) is applied as a router-level dependency (`linkvault/api/rate_limit.py`), keyed per client IP and per scope. Defaults (requests per minute per IP): `auth` (`/users/*`) 10, `api` (`/links/*`, `/analytics/*`) 60, `redirect` (`/{slug}`) 300. Limits are configurable via `RATE_LIMIT_*` settings, and `RATE_LIMIT_ENABLED=false` turns limiting off. Rejected requests get `429` with a `Retry-After` header. The `api` scope is shared by links and analytics.
 
-**Rationale:** The redirect endpoint is designed for sub-10 ms resolution via a single indexed DB lookup. Infrastructure-level rate limiting (e.g., nginx `limit_req`, Caddy rate-limit middleware, or a cloud WAF) is the recommended approach for production deployments and avoids adding latency or complexity to the hot path. This decision is revisable in a future phase.
+**Trade-offs and caveats:**
+- **In-memory and per-process:** state is lost on restart and is not shared between workers or hosts, so with N workers the effective limit is up to N× the configured value.
+- **Per-IP:** the key is `request.client.host`. Behind a reverse proxy or load balancer this is the proxy's address unless the server is configured to resolve forwarded headers (e.g., uvicorn `--proxy-headers` with trusted `--forwarded-allow-ips`); otherwise all clients share one bucket. Clients behind a shared NAT likewise share a bucket. Forwarded headers are not trusted by the app itself because they are spoofable.
+- **Memory:** stale and empty keys are pruned opportunistically, but the number of distinct IPs bounds memory use.
+- **Hot path:** the check is a few O(1) deque operations with no I/O, so redirect latency is essentially unaffected.
+
+**Recommendation:** Infrastructure-level rate limiting (e.g., nginx `limit_req`, Caddy rate-limit middleware, or a cloud WAF) is still recommended for production and is required for accurate limits in multi-worker deployments.
 
 ---
 

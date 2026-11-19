@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from linkvault.api.rate_limit import rate_limit
+from linkvault.config import settings
 from linkvault.database import get_db
 from linkvault.models.user import User
 from linkvault.schemas.user import (
@@ -17,7 +19,11 @@ from linkvault.schemas.user import (
     UserRegisterResponse,
 )
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(
+    prefix="/users",
+    tags=["users"],
+    dependencies=[Depends(rate_limit("auth", lambda: settings.RATE_LIMIT_AUTH_PER_MINUTE))],
+)
 
 
 def _hash_password(plain: str) -> str:
