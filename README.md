@@ -207,6 +207,17 @@ curl -s "$BASE/health"
 | `GET` | `/analytics/{slug}` | ✓ | Per-link analytics (clicks by day, IPs, referers) |
 | `GET` | `/analytics/summary` | ✓ | Aggregate stats across all of the user's links |
 
+### Health check
+
+`GET /health` is public (no API key) and runs a trivial `SELECT 1` against the database, giving up after `HEALTH_DB_TIMEOUT_SECONDS` (default 3).
+
+| Situation | HTTP | Body |
+|---|---|---|
+| Database answers | `200` | `{"status": "ok", "db": "ok", "scheduler": "...", "version": "0.1.0"}` |
+| Database unreachable or too slow | `503` | `{"status": "error", "db": "error", "scheduler": "...", "version": "0.1.0"}` |
+
+`scheduler` is `running`, `stopped`, or `not_started`. A stopped scheduler is reported but does **not** cause a `503`; monitors that care about the cleanup job should check this field. Failure details are written to the server log only, never to the response.
+
 All error responses follow a consistent envelope:
 
 ```json

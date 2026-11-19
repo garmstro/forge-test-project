@@ -53,3 +53,11 @@ This file documents every intentional ambiguity from `AGENTS.md` and how it was 
 
 **Rationale:** Because API keys are stored as one-way SHA-256 hashes, the server cannot return the original key. Re-issuing a new key on each token request is the simplest correct behaviour, doubles as a rotation mechanism, and is clearly documented. Clients that need a stable key should store it after registration and avoid calling `/users/token` unnecessarily.
 
+
+---
+
+## 7. Health Check Semantics
+
+**Decision:** `GET /health` returns `503` **only when the database probe fails** (a `SELECT 1` with a configurable timeout, `HEALTH_DB_TIMEOUT_SECONDS`, default 3 s). In that case the body reads `"status": "error"` and `"db": "error"`. The scheduler state (`running` / `stopped` / `not_started`) is reported but a stopped scheduler does **not** count as a failure.
+
+**Rationale:** Redirects and the API keep working without the scheduler; only expired-link cleanup is delayed. Failing the health check on a stopped scheduler would make load balancers pull a server that is still serving traffic correctly. Monitors that need to alert on a dead cleanup job should inspect the `scheduler` field rather than the status code. Database error details are logged server-side and never returned, to avoid leaking internals on a public endpoint.
