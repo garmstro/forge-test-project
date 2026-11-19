@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # APScheduler persistent job store
     SCHEDULER_DB_URL: str = "sqlite:///./scheduler.db"
 
+    # Seconds /health waits for the database probe before reporting "db": "error"
+    HEALTH_DB_TIMEOUT_SECONDS: float = 3.0
+
     # Application version
     VERSION: str = "0.1.0"
 
