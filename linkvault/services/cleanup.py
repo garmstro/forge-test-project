@@ -30,11 +30,11 @@ async def cleanup_expired_links(db: AsyncSession) -> None:
     now = _utc_now()
 
     # Find all expired, non-deleted links
-    stmt = select(Link).where(
+    select_stmt = select(Link).where(
         Link.expires_at < now,
         Link.deleted_at.is_(None),
     )
-    result = await db.execute(stmt)
+    result = await db.execute(select_stmt)
     expired_links = result.scalars().all()
 
     if not expired_links:
@@ -43,8 +43,8 @@ async def cleanup_expired_links(db: AsyncSession) -> None:
 
     # Mark them as deleted
     link_ids = [link.id for link in expired_links]
-    stmt = update(Link).where(Link.id.in_(link_ids)).values(deleted_at=now)
-    result = await db.execute(stmt)
+    update_stmt = update(Link).where(Link.id.in_(link_ids)).values(deleted_at=now)
+    await db.execute(update_stmt)
     await db.commit()
 
     count = len(expired_links)
