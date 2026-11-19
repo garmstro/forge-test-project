@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -18,10 +19,27 @@ logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
+    # ------------------------------------------------------------------
+    # Lifespan context manager for startup/shutdown
+    # ------------------------------------------------------------------
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Startup
+        logger.info("LinkVault starting up...")
+        try:
+            start_scheduler()
+        except Exception as e:
+            logger.error("Failed to start scheduler on app startup: %s", e, exc_info=True)
+        yield
+        # Shutdown
+        logger.info("LinkVault shutting down...")
+        stop_scheduler()
+
     application = FastAPI(
         title="LinkVault",
         version=settings.VERSION,
         description="A production-grade URL shortening and analytics platform.",
+        lifespan=lifespan,
     )
 
     # ------------------------------------------------------------------
@@ -46,22 +64,6 @@ def create_app() -> FastAPI:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"error": "internal_server_error", "detail": "An unexpected error occurred."},
         )
-
-    # ------------------------------------------------------------------
-    # Startup and shutdown events
-    # ------------------------------------------------------------------
-    @application.on_event("startup")
-    async def startup_event() -> None:
-        logger.info("LinkVault starting up...")
-        try:
-            start_scheduler()
-        except Exception as e:
-            logger.error("Failed to start scheduler on app startup: %s", e, exc_info=True)
-
-    @application.on_event("shutdown")
-    async def shutdown_event() -> None:
-        logger.info("LinkVault shutting down...")
-        stop_scheduler()
 
     # ------------------------------------------------------------------
     # Health endpoint — must be before redirects router (catch-all /{slug})
