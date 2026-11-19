@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from linkvault.database import Base, get_db
 from linkvault.main import app
+from linkvault.services import scheduler as scheduler_module
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -58,6 +59,9 @@ async def client(db_session: AsyncSession, db_engine):
 
     Each dependency invocation opens a new session so that writes from
     one request are committed and visible to the next.
+    
+    The scheduler is disabled during tests to avoid interference with
+    the test database and event loop.
     """
     factory = async_sessionmaker(
         bind=db_engine,
@@ -76,10 +80,20 @@ async def client(db_session: AsyncSession, db_engine):
                 await session.rollback()
                 raise
 
+    # Disable scheduler during tests by mocking init_scheduler to do nothing
+    original_init = scheduler_module.init_scheduler
+    
+    async def mock_init_scheduler():
+        return None
+    
+    scheduler_module.init_scheduler = mock_init_scheduler
+
     app.dependency_overrides[get_db] = override_get_db
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
     app.dependency_overrides.clear()
-
+    
+    # Restore original init_scheduler
+    scheduler_module.init_scheduler = original_init
