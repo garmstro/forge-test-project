@@ -1,3 +1,5 @@
+This is a test from Forge AI
+
 # LinkVault 🔗
 
 > A production-grade URL shortening and analytics platform — built with FastAPI, SQLAlchemy (async), APScheduler, and a full-featured terminal CLI.
@@ -288,4 +290,3 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale behind each architectu
 - **Soft-delete and analytics** — clicks are tied to `link_id` (UUID), not slug. Reusing a slug for a new link creates a new UUID, so historical click data is never mixed across ownership boundaries.
 - **Naive datetime handling** — datetimes without a timezone offset are assumed to be **UTC** and stored as-is. The API documents this behaviour and recommends always sending an explicit offset.
 - **Rate limiting** — no rate limiting is implemented in this phase. The redirect endpoint is designed for sub-10 ms resolution; infrastructure-level rate limiting (e.g., a reverse proxy) is the recommended approach for production deployments.
-
