@@ -90,23 +90,72 @@ Health check: `http://localhost:8000/health`
 
 ## Running the CLI
 
+The `linkvault` command is a client for a **running** LinkVault server — it talks to the REST API and never touches the database directly. Every command supports `--help`:
+
 ```bash
 linkvault --help
+linkvault shorten --help
 ```
 
-Available commands:
+### Server address
 
-```
-linkvault login                          # Prompt for email/password; store API key in ~/.linkvault/config.json
-linkvault logout                         # Remove stored credentials
-linkvault shorten <url> [--slug SLUG] [--expires YYYY-MM-DD] [--max-clicks N]
-linkvault list [--page N]
-linkvault info <slug>
-linkvault stats <slug> [--days N]
-linkvault delete <slug>
+Every command accepts `--api-url`. If it is not given, the CLI uses the `LINKVAULT_API_URL` environment variable, and falls back to `http://localhost:8000`:
+
+```bash
+export LINKVAULT_API_URL=http://localhost:8000      # optional
+linkvault list --api-url http://links.internal:8000  # flag wins over the env var
 ```
 
-The CLI reads `LINKVAULT_API_URL` from the environment (default: `http://localhost:8000`) or accepts `--api-url` on every command.
+### First-time setup
+
+The CLI has no `register` command. Create your first user with the API (see the [curl example](#full-lifecycle-example-curl)):
+
+```bash
+curl -s -X POST http://localhost:8000/users/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "password": "s3cr3t!"}'
+```
+
+Then log in. You are prompted for email and password (the password is hidden as you type), and the API key is saved to `~/.linkvault/config.json`, readable only by your user:
+
+```bash
+linkvault login
+```
+
+> **Note:** `linkvault login` issues a **new** API key on every call and the previous key stops working (see `DECISIONS.md` §6). Scripts or other machines that use the old key need to log in again.
+
+### Commands
+
+```bash
+# Create a short link — prints the full short URL in bold green
+linkvault shorten https://example.com/some/long/path
+linkvault shorten https://example.com --slug demo
+linkvault shorten https://example.com --expires 2026-12-31 --max-clicks 100
+#   --expires YYYY-MM-DD means the end of that day (23:59:59 UTC)
+
+# Table of your links: Slug, Destination (cut to 50 chars), Clicks, Expires, Status
+linkvault list
+linkvault list --page 2
+
+# Full details for one link, including the live click count
+linkvault info demo
+
+# Totals, a clicks-by-day bar chart, top referers and top user agents
+linkvault stats demo              # last 30 days
+linkvault stats demo --days 7     # 1-365
+
+# Delete a link (the slug becomes reusable)
+linkvault delete demo
+
+# Remove the stored API key
+linkvault logout
+```
+
+Status in `list` / `info` is **Active**, **Expired** (past its expiry date) or **Exhausted** (click limit reached).
+
+### Errors
+
+Errors from the server (wrong password, unknown slug, someone else's link, reserved or duplicate slug, invalid URL…) are printed in red with the server's message, and the command exits with a non-zero code. Commands that need a login print "Run `linkvault login` first" when no key is stored, and suggest logging in again if the stored key is rejected. If the server is unreachable you'll see `Could not connect to <address>. Is the server running?`.
 
 ---
 
@@ -116,7 +165,7 @@ The CLI reads `LINKVAULT_API_URL` from the environment (default: `http://localho
 pytest -v
 ```
 
-The test suite uses an in-memory SQLite database — no running server required. Each test gets a fresh database via a session-scoped fixture.
+The test suite uses an in-memory SQLite database — no running server required. CLI tests (`tests/test_cli.py`) use an in-memory stand-in for the server. Each test gets a fresh database via a session-scoped fixture.
 
 To also check types:
 
@@ -274,7 +323,8 @@ linkvault/
     ├── test_links.py
     ├── test_redirects.py
     ├── test_analytics.py
-    └── test_auth.py
+    ├── test_auth.py
+    └── test_cli.py
 ```
 
 ---
