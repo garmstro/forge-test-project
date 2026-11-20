@@ -94,7 +94,9 @@ Health check: `http://localhost:8000/health`
 linkvault --help
 ```
 
-Available commands:
+The CLI talks to a running LinkVault server. The server address is taken from `--api-url` (accepted by every command), then the `LINKVAULT_API_URL` environment variable, then `http://localhost:8000`.
+
+Available commands (each one supports `--help`):
 
 ```
 linkvault login                          # Prompt for email/password; store API key in ~/.linkvault/config.json
@@ -103,10 +105,28 @@ linkvault shorten <url> [--slug SLUG] [--expires YYYY-MM-DD] [--max-clicks N]
 linkvault list [--page N]
 linkvault info <slug>
 linkvault stats <slug> [--days N]
-linkvault delete <slug>
+linkvault delete <slug> [--yes]
 ```
 
-The CLI reads `LINKVAULT_API_URL` from the environment (default: `http://localhost:8000`) or accepts `--api-url` on every command.
+- **`login`** asks for your email and password (the password is hidden) and saves the API key to `~/.linkvault/config.json`, which is readable only by you. You can also pass `--email` / `--password`. **Logging in issues a new API key and replaces the previous one**, so other devices or scripts using the old key are signed out (see [`DECISIONS.md`](DECISIONS.md) §6).
+- **`logout`** deletes the saved credentials.
+- **`shorten`** prints the full short URL (e.g. `http://localhost:8000/abc123`) in bold green. `--expires` takes a date in `YYYY-MM-DD` format; the link stops working at the end of that day (UTC). An invalid date is rejected before anything is sent to the server.
+- **`list`** shows a table with Slug, Destination (cut to 50 characters), Clicks, Expires and Status (`active`, `expired` or `used up`), 20 links per page.
+- **`info`** shows every detail of one link, including its live click count.
+- **`stats`** shows total clicks, unique visitors, a clicks-per-day bar chart and the top referrers and browsers. `--days` sets the lookback window (default 30, max 365).
+- **`delete`** asks for confirmation first; pass `--yes` (or `-y`) to skip the question. The slug becomes available for reuse straight away.
+
+Errors returned by the server, a missing login, or an unreachable server are printed in red, and the command exits with a non-zero status.
+
+Example session:
+
+```bash
+linkvault login
+linkvault shorten https://example.com --slug demo   # → http://localhost:8000/demo
+linkvault list
+linkvault stats demo --days 7
+linkvault delete demo
+```
 
 ---
 
@@ -274,7 +294,8 @@ linkvault/
     ├── test_links.py
     ├── test_redirects.py
     ├── test_analytics.py
-    └── test_auth.py
+    ├── test_auth.py
+    └── test_cli.py
 ```
 
 ---
