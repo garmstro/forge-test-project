@@ -37,9 +37,9 @@ Everything runs **locally with zero paid dependencies** — no external services
 - **Redirect engine** — single-query slug resolution with atomic click-count increments; `301` for permanent links, `302` for capped/expiring ones, `410` when a link is exhausted.
 - **Click analytics** — per-link breakdown by day, unique IPs, top referers, and top user-agents; user-level summary across all links.
 - **Authentication** — email + password registration; API key (UUID4) issued on registration and exchangeable via `/users/token`; all protected routes use `Authorization: Bearer <api_key>`.
-- **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) expires links every 15 minutes and emits structured JSON log lines.
+- **Background cleanup** — APScheduler job (SQLite-backed, survives restarts) soft-deletes expired links every 15 minutes, freeing their slugs for reuse, and emits one structured JSON log line per run.
 - **Terminal CLI** — `linkvault` command for every API operation, with Rich tables, bold-green short URLs, and a bar-chart view of daily click data.
-- **Health endpoint** — `/health` reports DB and scheduler status; returns `503` when the database is unreachable.
+- **Health endpoint** — `/health` probes the database and reports whether the scheduler is running; returns `503` when the database is unreachable.
 
 ---
 
@@ -85,6 +85,29 @@ uvicorn linkvault.main:app --reload
 The API is now available at `http://localhost:8000`.  
 Interactive docs: `http://localhost:8000/docs`  
 Health check: `http://localhost:8000/health`
+
+### Background cleanup
+
+When the server starts it also starts an APScheduler background scheduler (and stops it on shutdown). Every **15 minutes** it runs the cleanup job, which:
+
+- finds every link whose `expires_at` is in the past and whose `deleted_at` is still empty;
+- sets `deleted_at` to the current UTC time in a single `UPDATE` — the link drops out of `GET /links`, and its slug becomes **immediately reusable**, exactly as with a manual `DELETE`;
+- logs one structured line per run, e.g. `{"event": "cleanup", "links_expired": 3, "timestamp": "2026-11-20T15:15:00+00:00"}` (`links_expired` is `0` when there is nothing to do).
+
+If a run fails, the error is logged as a `cleanup_failed` event and the next run proceeds as normal. The schedule lives in its own SQLite file (`SCHEDULER_DB_URL`, default `./scheduler.db`), so it survives restarts; the job has a fixed id, so restarting never creates a second copy. A run missed while the server was down executes once on the next start.
+
+Links that hit their `max_clicks` cap are not soft-deleted by the job; they keep returning `410 Gone` from the redirect engine.
+
+### Health check
+
+`GET /health` runs a trivial `SELECT 1` against the database:
+
+| Situation | Status | Body |
+|---|---|---|
+| Database reachable | `200` | `{"status": "ok", "db": "ok", "scheduler": "running", "version": "0.1.0"}` |
+| Database unreachable | `503` | `{"status": "error", "db": "error", "scheduler": "running", "version": "0.1.0"}` |
+
+`scheduler` is `"running"` while the background scheduler is active and `"not_running"` otherwise.
 
 ---
 
@@ -274,7 +297,9 @@ linkvault/
     ├── test_links.py
     ├── test_redirects.py
     ├── test_analytics.py
-    └── test_auth.py
+    ├── test_auth.py
+    ├── test_cleanup.py
+    └── test_health.py
 ```
 
 ---
