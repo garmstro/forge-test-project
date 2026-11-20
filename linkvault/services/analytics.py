@@ -1,6 +1,7 @@
 """Click aggregation service for the Analytics API."""
 from __future__ import annotations
 
+import zoneinfo
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -28,8 +29,6 @@ def _lookback_start(days: int) -> datetime:
 
 def _to_tz_date(dt_utc: datetime, tz_name: str) -> date:
     """Convert a naive UTC datetime to a date in the given IANA timezone."""
-    import zoneinfo
-
     tz = zoneinfo.ZoneInfo(tz_name)
     aware = dt_utc.replace(tzinfo=timezone.utc)
     return aware.astimezone(tz).date()
@@ -50,8 +49,6 @@ async def get_link_analytics(
 
     The ``tz`` parameter is an IANA timezone name used for day bucketing.
     """
-    import zoneinfo
-
     # Validate timezone early — raises ZoneInfoNotFoundError on bad input
     try:
         zoneinfo.ZoneInfo(tz)
@@ -236,4 +233,3 @@ async def get_user_summary(
         "clicks_last_30_days": clicks_30d,
         "top_link": top_link,
     }
-
